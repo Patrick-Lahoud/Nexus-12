@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BookOpen, Settings, HelpCircle, LogOut, ShoppingCart, Shield, Heart, Activity, Lock, Unlock, Zap, Flame, Target, ChevronLeft, ChevronRight, Coins, Wrench, Pickaxe, BarChart2, RotateCcw } from 'lucide-react';
+import { BookOpen, Settings, HelpCircle, LogOut, ShoppingCart, Shield, Heart, Activity, Lock, Unlock, Zap, Flame, Target, ChevronLeft, ChevronRight, Coins, Wrench, Pickaxe, BarChart2 } from 'lucide-react';
 import { GameEngine } from '../../game/engine.ts';
 import { gameAudio } from '../../game/audio.ts';
 import { useLanguage, translateDynamicName } from '../../game/localization.ts';
@@ -267,31 +267,26 @@ export default function HUD({ engine, room, score, highestRoom = 1, onShowShop, 
 
         {/* Rebuilds Indicator — green, shop-sized, sits between the Shop button and the health readout */}
         {gameMode === 'OVERDRIVE' && typeof rebuildsLeft === 'number' && rebuildsLeft > 0 && (
-          <div className="flex items-center gap-3 bg-emerald-950/60 border-2 border-emerald-500/50 rounded-2xl px-5 py-2.5 min-w-[170px] shadow-[0_0_15px_rgba(16,185,129,0.2)]">
-            <div className="w-10 h-10 flex items-center justify-center bg-emerald-400/15 text-emerald-300 font-black rounded-xl border border-emerald-400/40">
-              <RotateCcw size={20} strokeWidth={2.5} />
-            </div>
-            <div className="flex flex-col items-start">
-              <span className="text-xs font-black uppercase tracking-wider text-emerald-300 leading-none">
-                {t('rebuilds_short', {}, 'Rebuilds')}
-              </span>
-              <div className="flex items-center gap-1.5 mt-1.5">
-                {[0, 1, 2].map(i => {
-                  const lit = i < rebuildsLeft;
-                  return (
-                    <span
-                      key={i}
-                      className={`w-6 h-6 rounded-md border flex items-center justify-center transition-all duration-300 ${
-                        lit
-                          ? 'bg-emerald-400 text-emerald-950 border-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
-                          : 'bg-zinc-900/80 border-zinc-700 text-zinc-600'
-                      }`}
-                    >
-                      <Wrench size={14} strokeWidth={2.5} />
-                    </span>
-                  );
-                })}
-              </div>
+          <div className="flex flex-col items-center justify-center gap-1.5 bg-emerald-950/60 border-2 border-emerald-500/50 rounded-2xl px-5 py-2.5 min-w-[170px] shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+            <span className="text-xs font-black uppercase tracking-wider text-emerald-300 leading-none text-center">
+              {t('rebuilds_short', {}, 'Rebuilds')}
+            </span>
+            <div className="flex items-center gap-1.5">
+              {[0, 1, 2].map(i => {
+                const lit = i < rebuildsLeft;
+                return (
+                  <span
+                    key={i}
+                    className={`w-6 h-6 rounded-md border flex items-center justify-center transition-all duration-300 ${
+                      lit
+                        ? 'bg-emerald-400 text-emerald-950 border-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                        : 'bg-zinc-900/80 border-zinc-700 text-zinc-600'
+                    }`}
+                  >
+                    <Wrench size={14} strokeWidth={2.5} />
+                  </span>
+                );
+              })}
             </div>
           </div>
         )}
