@@ -1,0 +1,207 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #08080c;
+  --color-primary: #22d3ee; /* cyan-400 */
+  --color-enemy: #e11d48; /* rose-600 */
+  --color-accent: #facc15; /* yellow-400 */
+  --color-zinc-800: #27272a;
+  --color-zinc-700: #3f3f46;
+  --color-zinc-900: #18181b;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-white font-sans antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-black italic uppercase tracking-tighter;
+  }
+
+  button, [role="button"], .cursor-pointer {
+    transition: all 0.12s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  button:hover, [role="button"]:hover, .cursor-pointer:hover {
+    transform: scale(1.03) translateY(-1px);
+    filter: brightness(1.1);
+  }
+
+  button:active, [role="button"]:active, .cursor-pointer:active {
+    transform: scale(0.95) translateY(1px);
+    filter: brightness(0.9);
+  }
+}
+
+.glitch-border {
+  @apply border-8 border-double border-zinc-800;
+}
+
+/* Monospace removed app-wide: every font-mono element renders in the default sans font */
+.font-mono {
+  font-family: inherit !important;
+}
+
+.font-retro, .retro-theme-active, .retro-theme-active * {
+  font-family: inherit !important;
+  letter-spacing: 0.02em !important;
+  border-radius: 0px !important;
+}
+
+.font-retro-large {
+  font-family: inherit !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em !important;
+}
+
+.arena-glow {
+  box-shadow: inset 0 0 100px rgba(0,0,0,0.5);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #09090e;
+  border-left: 1px solid #14141a;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #22222a;
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #383844;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #22222a #09090e;
+}
+
+/* Dedicated dark simplistic Shop vertical scrollbar */
+.shop-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.shop-scrollbar::-webkit-scrollbar-track {
+  background: #07070b;
+  border-left: 1px solid #121218;
+}
+
+.shop-scrollbar::-webkit-scrollbar-thumb {
+  background: #202028;
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+
+.shop-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #333340;
+}
+
+.shop-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #202028 #07070b;
+  overflow-x: hidden !important;
+}
+
+@keyframes crt-flicker {
+  0% { opacity: 0.982; }
+  50% { opacity: 1; }
+  100% { opacity: 0.988; }
+}
+
+@keyframes intense-glow {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.4), inset 0 0 0px rgba(255,255,255,0);
+    filter: brightness(1);
+    border-color: rgba(245, 158, 11, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(245, 158, 11, 1), inset 0 0 8px rgba(255, 255, 255, 0.4);
+    filter: brightness(1.3);
+    border-color: rgba(255, 255, 255, 1);
+  }
+}
+
+.animate-intense-glow {
+  animation: intense-glow 1.2s infinite ease-in-out;
+}
+
+@keyframes intense-cyan-glow {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(6, 182, 212, 0.4), inset 0 0 0px rgba(255,255,255,0);
+    filter: brightness(1);
+    border-color: rgba(6, 182, 212, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(6, 182, 212, 1), inset 0 0 8px rgba(255, 255, 255, 0.4);
+    filter: brightness(1.3);
+    border-color: rgba(255, 255, 255, 1);
+  }
+}
+
+.animate-intense-cyan-glow {
+  animation: intense-cyan-glow 1.2s infinite ease-in-out;
+}
+
+.retro-viewport {
+  animation: crt-flicker 0.25s infinite;
+  position: relative;
+  overflow: hidden;
+}
+
+.retro-viewport canvas {
+  filter: contrast(1.08) brightness(1.03);
+}
+
+/* Space UI Background & Card Aesthetics */
+.space-site-bg {
+  position: relative;
+  background-color: #020205 !important;
+  background-image: 
+    radial-gradient(circle at 15% 15%, rgba(63, 63, 70, 0.16) 0%, transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(39, 39, 42, 0.22) 0%, transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(113, 113, 122, 0.05) 0%, transparent 60%),
+    linear-gradient(to right, rgba(161, 161, 170, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(161, 161, 170, 0.035) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 36px 36px, 36px 36px;
+}
+
+.space-ui-bg {
+  position: relative;
+  background-color: rgba(9, 9, 11, 0.95) !important;
+  background-image: 
+    radial-gradient(circle at 10% 10%, rgba(63, 63, 70, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 90% 90%, rgba(39, 39, 42, 0.15) 0%, transparent 40%),
+    linear-gradient(to right, rgba(161, 161, 170, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(161, 161, 170, 0.03) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+}
+
+.space-ui-card {
+  position: relative;
+  background-color: rgba(18, 18, 22, 0.88) !important;
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(161, 161, 170, 0.06) 0%, transparent 60%),
+    linear-gradient(to right, rgba(113, 113, 122, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(113, 113, 122, 0.025) 1px, transparent 1px);
+  background-size: 100% 100%, 20px 20px, 20px 20px;
+}
+
+.space-grid-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: 
+    radial-gradient(circle at 50% 50%, transparent 60%, rgba(0, 0, 0, 0.4) 100%),
+    linear-gradient(to right, rgba(6, 182, 212, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(6, 182, 212, 0.03) 1px, transparent 1px);
+  background-size: 100% 100%, 24px 24px, 24px 24px;
+}
+
+
+
