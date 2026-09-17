@@ -6,15 +6,29 @@ import { balance } from './balance.ts';
 // enemy so a single press can never one-shot most enemies; the utility (knockback, freeze, burn) is what carries them.
 const ABILITY_BURST_HP_CAP = 0.35;
 
+// Milestone bosses (every 10 rooms) carry the BULWARK trait: a rolling
+// damage window caps how much of their max HP they can lose per second, so a single
+// shotgun volley can never one-shot them. Sustained damage over time is unaffected.
+const BULWARK_WINDOW_MS = 1000;
+const BULWARK_WINDOW_HP_CAP = 0.12; // max 12% of max HP per rolling 1s window
+
 export interface ActiveControlField {
   id: string;
-  type: 'shockwave_blast' | 'gravity_well' | 'temporal_freeze';
+  type: 'shockwave_blast' | 'gravity_well' | 'temporal_freeze' | 'toxin_cloud' | 'incendiary_blast' | 'arc_chain';
   pos: { x: number; y: number };
   radius: number;
   maxRadius: number;
   life: number;
   maxLife: number;
   level: number;
+  poisonTimer?: number;
+  poisonTick?: number;
+  burnTimer?: number;
+  burnDps?: number;
+  arcsDone?: number;
+  jumpCount?: number;
+  jumpRange?: number;
+  arcTargets?: Array<{ from: { x: number; y: number }; to: { x: number; y: number }; t: number; life: number }>;
   tickTimer?: number;
 }
 
@@ -51,6 +65,8 @@ export class GameEngine {
   
   // Tactical Overdrive Interactive Mode variables
   gameMode: 'SURVIVAL' | 'HARDCORE' | 'SANDBOX' | 'OVERDRIVE' | 'OVERDRIVE_SANDBOX' = 'SURVIVAL';
+  // Master god-mode flag; survives player recreation (see createPlayer)
+  godMode: boolean = false;
   pointerX: number = 0;
   pointerY: number = 0;
   isTetherActive: boolean = false;
@@ -391,8 +407,12 @@ export class GameEngine {
       cooldownDuration = Math.max(3.0, 8.0 - (level - 1) * 0.6);
     } else if (controlId === 'temporal_freeze') {
       cooldownDuration = Math.max(4.0, 12.0 - (level - 1) * 0.8);
-    } else if (controlId === 'emp_pulse') {
-      cooldownDuration = Math.max(3.0, 10.0 - (level - 1) * 0.7);
+    } else if (controlId === 'toxin_cloud') {
+      cooldownDuration = Math.max(3.0, 9.0 - (level - 1) * 0.5);
+    } else if (controlId === 'incendiary_blast') {
+      cooldownDuration = Math.max(2.0, 7.0 - (level - 1) * 0.4);
+    } else if (controlId === 'arc_chain') {
+      cooldownDuration = Math.max(3.0, 11.0 - (level - 1) * 0.6);
     } else if (controlId?.startsWith('turret_')) {
       cooldownDuration = 10.0; // cooldown for redeployment has 10s default
     }
@@ -626,6 +646,101 @@ export class GameEngine {
         maxLife: 1.2,
         isCrit: true
       });
+
+    } else if (controlId === 'toxin_cloud') {
+      // Toxic cloud at cursor that poisons enemies inside over time
+      gameAudio.playHitSound(false, 'laser');
+      const maxRadius = 130 + (level - 1) * 12;
+      const maxLife = 6 + (level - 1) * 2;
+      const poisonTick = 8 + level * 3;
+
+      this.activeControlFields.push({
+        id: Math.random().toString(),
+        type: 'toxin_cloud',
+        pos: { x, y },
+        radius: maxRadius,
+        maxRadius,
+        life: maxLife,
+        maxLife,
+        level,
+        poisonTick,
+        poisonTimer: 0
+      });
+
+      this.floatingTexts.push({
+        id: Math.random().toString(),
+        pos: { x, y },
+        vel: { x: 0, y: -50 },
+        text: "TOXIN CLOUD!",
+        color: '#4ade80',
+        life: 1.2,
+        maxLife: 1.2,
+        isCrit: true
+      });
+
+    } else if (controlId === 'incendiary_blast') {
+      // Cone of fire at cursor that burns enemies caught in it
+      gameAudio.playHitSound(false, 'laser');
+      const radius = 110 + (level - 1) * 10;
+      const burnDur = 2 + level * 0.4;
+      const burnDps = 10 + level * 4;
+
+      this.activeControlFields.push({
+        id: Math.random().toString(),
+        type: 'incendiary_blast',
+        pos: { x, y },
+        radius,
+        maxRadius: radius,
+        life: burnDur,
+        maxLife: burnDur,
+        level,
+        burnDps,
+        burnTimer: 0
+      });
+
+      this.floatingTexts.push({
+        id: Math.random().toString(),
+        pos: { x, y },
+        vel: { x: 0, y: -50 },
+        text: "INCENDIARY!",
+        color: '#f97316',
+        life: 1.2,
+        maxLife: 1.2,
+        isCrit: true
+      });
+
+    } else if (controlId === 'arc_chain') {
+      // Chaining lightning arcs that jump between nearest enemies in range
+      gameAudio.playHitSound(false, 'laser');
+      const jumpRange = 130 + (level - 1) * 12;
+      const jumpCount = 2 + Math.floor(level / 2);
+
+      this.activeControlFields.push({
+        id: Math.random().toString(),
+        type: 'arc_chain',
+        pos: { x, y },
+        radius: jumpRange,
+        maxRadius: jumpRange,
+        life: 0.6,
+        maxLife: 0.6,
+        level,
+        jumpRange,
+        jumpCount,
+        arcsDone: 0,
+        arcTargets: [] as Array<{ from: Vector; to: Vector; t: number; life: number }>
+      });
+
+      this.floatingTexts.push({
+        id: Math.random().toString(),
+        pos: { x, y },
+        vel: { x: 0, y: -50 },
+        text: "ARC CHAIN!",
+        color: '#7dd3fc',
+        life: 1.2,
+        maxLife: 1.2,
+        isCrit: true
+      });
+
     } else if (controlId?.startsWith('turret_')) {
       // Spawn new defensive sentry turret
       let maxHp = 120;
@@ -749,7 +864,7 @@ export class GameEngine {
   }
 
   createPlayer(): PlayerBall {
-    return {
+    const player: PlayerBall = {
       id: 'player',
       type: EntityType.PLAYER_BALL,
       pos: { x: this.width / 2, y: this.height / 2 },
@@ -843,10 +958,14 @@ export class GameEngine {
         upgradeChoicesCount: 3,
       },
     };
+    // God mode is sticky across player recreations (new runs, checkpoints, resumes)
+    // so an INVINCIBILITY toggle stays on until explicitly switched off.
+    player.isInvincible = this.godMode;
+    return player;
   }
 
   spawnEnemy(room: number, forceType?: string) {
-    const types: ('BASIC' | 'SHOOTER' | 'SPLITTER' | 'TANK' | 'SHIELDED' | 'GUNNER' | 'BOMBER' | 'SWARMER' | 'PHANTOM' | 'TESLA_COIL' | 'GRAVITY_DRAIN' | 'MIRAGE' | 'CRYOMANCER' | 'STALKER' | 'HEALER' | 'WARP_WARLOCK' | 'PLASMA_STORMER' | 'BIO_LEECH')[] = ['BASIC'];
+    const types: ('BASIC' | 'SHOOTER' | 'SPLITTER' | 'TANK' | 'SHIELDED' | 'GUNNER' | 'BOMBER' | 'SWARMER' | 'PHANTOM' | 'TESLA_COIL' | 'GRAVITY_DRAIN' | 'MIRAGE' | 'CRYOMANCER' | 'STALKER' | 'HEALER' | 'WARP_WARLOCK' | 'PLASMA_STORMER' | 'BIO_LEECH' | 'VOID_MARAUDER' | 'TIME_EATER' | 'SINGULARITY_SEED' | 'PLAGUE_SPREADER' | 'FROST_TYRANT')[] = ['BASIC'];
     if (room > 1) types.push('SHOOTER');
     if (room > 5) types.push('SPLITTER');
     if (room > 8) types.push('TANK');
@@ -880,6 +999,31 @@ export class GameEngine {
         types.push('BIO_LEECH');
         types.push('WARP_WARLOCK');
         types.push('PLASMA_STORMER');
+    }
+    // Deep-void tiers: new unique enemies appear at each milestone band (40+)
+    if (room > 40) {
+        types.push('VOID_MARAUDER');
+        types.push('VOID_MARAUDER');
+    }
+    if (room > 50) {
+        types.push('TIME_EATER');
+        types.push('TIME_EATER');
+    }
+    if (room > 60) {
+        types.push('SINGULARITY_SEED');
+        types.push('SINGULARITY_SEED');
+    }
+    if (room > 70) {
+        types.push('PLAGUE_SPREADER');
+        types.push('PLAGUE_SPREADER');
+    }
+    if (room > 80) {
+        types.push('FROST_TYRANT');
+        types.push('FROST_TYRANT');
+    }
+    // Post-100 endless: full rotation through every enemy ever introduced
+    if (room > 100) {
+        types.push('BASIC', 'SHOOTER', 'SPLITTER', 'TANK', 'SHIELDED', 'GUNNER', 'BOMBER', 'SWARMER', 'PHANTOM', 'TESLA_COIL', 'GRAVITY_DRAIN', 'MIRAGE', 'CRYOMANCER', 'STALKER', 'HEALER', 'WARP_WARLOCK', 'PLASMA_STORMER', 'BIO_LEECH', 'VOID_MARAUDER', 'TIME_EATER', 'SINGULARITY_SEED', 'PLAGUE_SPREADER', 'FROST_TYRANT');
     }
 
     const type = forceType as any || types[Math.floor(Math.random() * types.length)];
@@ -1032,6 +1176,36 @@ export class GameEngine {
             color = '#059669';
             defaultSpeed = 1.1;
             break;
+        case 'VOID_MARAUDER':
+            radius = 21;
+            hpBaseVal = 95;
+            color = '#a78bfa';
+            defaultSpeed = 1.3;
+            break;
+        case 'TIME_EATER':
+            radius = 20;
+            hpBaseVal = 110;
+            color = '#fbbf24';
+            defaultSpeed = 1.0;
+            break;
+        case 'SINGULARITY_SEED':
+            radius = 18;
+            hpBaseVal = 70;
+            color = '#6366f1';
+            defaultSpeed = 0.9;
+            break;
+        case 'PLAGUE_SPREADER':
+            radius = 22;
+            hpBaseVal = 105;
+            color = '#84cc16';
+            defaultSpeed = 0.8;
+            break;
+        case 'FROST_TYRANT':
+            radius = 24;
+            hpBaseVal = 130;
+            color = '#67e8f9';
+            defaultSpeed = 0.85;
+            break;
         default:
             radius = 15;
             hpBaseVal = 15;
@@ -1155,7 +1329,7 @@ export class GameEngine {
     if (this.player) {
         this.player.spawnShieldTimer = 1.0;
     }
-    const hpBase = isUltra ? 45000 : 4500; // Base health heavily buffed (from 15000 / 1800)
+    const hpBase = isUltra ? 60000 : 6000; // Base health heavily buffed (from 15000 / 1800)
     let roomScale = room;
     if (room > 10) roomScale = 10 + (room - 10) * 2.5; 
     if (room > 40) roomScale = 85 + (room - 40) * 5.0;
@@ -1164,7 +1338,7 @@ export class GameEngine {
     
     // Substantial boss buffs for Room 30 and above
     if (room >= 30) {
-        hpValue *= 3.5; // Ultimate mechanical boss gets +250% additional health scaling!
+        hpValue *= 2.5; // +150% additional health scaling for Room 30+ bosses
     }
     
     // Additional special buffs for Round 20 and Round 30 bosses (TITAN and PHANTOM_ACE)
@@ -1172,17 +1346,20 @@ export class GameEngine {
         hpValue *= 1.8; // Titan boss gets an additional +80% health multiplier!
     }
     if (room === 30 || (roomScale >= 25 && roomScale < 35)) {
-        hpValue *= 2.2; // Phantom Ace gets an additional +120% health multiplier!
+        hpValue *= 0.7; // Phantom Ace health nerf: the Level 30 milestone fight no longer drags
     }
 
     // Force specific bosses at milestones
     let bossSubtype: any = 'WARRIOR';
-    
-    const subtypes: ('WARRIOR' | 'TITAN' | 'SWARM_QUEEN' | 'PHANTOM_ACE' | 'VOID_SENTINEL' | 'STORM_BRINGER' | 'ARCHITECT' | 'REAPER' | 'NEXUS_OVERLORD')[] = 
+    let shieldHp = 0;
+
+    const subtypes: ('WARRIOR' | 'TITAN' | 'SWARM_QUEEN' | 'PHANTOM_ACE' | 'VOID_SENTINEL' | 'STORM_BRINGER' | 'ARCHITECT' | 'REAPER' | 'NEXUS_OVERLORD' | 'CHRONO_WARDEN' | 'GRAVITON_CORE' | 'PLAGUE_LORD' | 'CRYO_SOVEREIGN')[] =
         ['WARRIOR', 'TITAN', 'STORM_BRINGER'];
     if (room >= 30) subtypes.push('PHANTOM_ACE', 'ARCHITECT');
-    if (room >= 40) subtypes.push('VOID_SENTINEL');
-    if (room >= 50) subtypes.push('SWARM_QUEEN', 'REAPER', 'NEXUS_OVERLORD');
+    if (room >= 40) subtypes.push('VOID_SENTINEL', 'CHRONO_WARDEN');
+    if (room >= 50) subtypes.push('SWARM_QUEEN', 'REAPER', 'GRAVITON_CORE');
+    if (room >= 60) subtypes.push('NEXUS_OVERLORD', 'PLAGUE_LORD');
+    if (room >= 70) subtypes.push('CRYO_SOVEREIGN');
 
     bossSubtype = subtypes[Math.floor(Math.random() * subtypes.length)];
 
@@ -1190,23 +1367,43 @@ export class GameEngine {
     if (room === 20) bossSubtype = 'TITAN';
     if (room === 30) bossSubtype = 'PHANTOM_ACE';
     if (room === 40) bossSubtype = 'STORM_BRINGER';
-    if (room === 50) bossSubtype = 'NEXUS_OVERLORD';
-    if (room % 100 === 0) bossSubtype = 'NEXUS_OVERLORD';
+    if (room === 50) bossSubtype = 'VOID_SENTINEL';
+    if (room === 60) bossSubtype = 'SWARM_QUEEN';
+    if (room === 70) bossSubtype = 'CHRONO_WARDEN';
+    if (room === 80) bossSubtype = 'GRAVITON_CORE';
+    if (room === 90) bossSubtype = 'PLAGUE_LORD';
+    if (room === 100) bossSubtype = 'CRYO_SOVEREIGN'; // Final boss
+    if (room % 100 === 0 && room > 100) bossSubtype = subtypes[Math.floor(Math.random() * subtypes.length)]; // Endless rotation
 
-    const radius = (bossSubtype === 'NEXUS_OVERLORD') ? 110 : (isUltra ? 95 : 68);
+    const radius = (bossSubtype === 'NEXUS_OVERLORD') ? 110 : (bossSubtype === 'CRYO_SOVEREIGN' ? 105 : (isUltra ? 95 : 68));
     let bossType: any = isUltra ? 'ULTRA_BOSS' : 'BOSS';
 
     if (bossSubtype === 'WARRIOR' || room === 10) {
         hpValue = isUltra ? 8000 : 950; // Greatly reduced Level 10 / Warrior boss health to make it accessible
     } else if (bossSubtype === 'TITAN' || room === 20) {
-        hpValue = isUltra ? 14000 : 2800; // Balanced Level 20 Titan boss health
+        hpValue = isUltra ? 30000 : 30000; // Level 20 Titan boss: trimmed again so the milestone fight stays snappy
+    } else if (bossSubtype === 'VOID_SENTINEL' && room === 50) {
+        hpValue = 180000; // Level 50 milestone fight (trimmed)
+        shieldHp = 60000;
+    } else if (bossSubtype === 'SWARM_QUEEN' && room === 60) {
+        hpValue = 420000; // Level 60 milestone fight (trimmed)
+    } else if (bossSubtype === 'CHRONO_WARDEN' && room === 70) {
+        hpValue = 1000000; // Level 70 milestone fight (trimmed)
+        shieldHp = 260000;
+    } else if (bossSubtype === 'GRAVITON_CORE' && room === 80) {
+        hpValue = 2200000; // Level 80 milestone fight (trimmed)
+    } else if (bossSubtype === 'PLAGUE_LORD' && room === 90) {
+        hpValue = 4800000; // Level 90 milestone fight (trimmed)
+        shieldHp = 1100000;
+    } else if (bossSubtype === 'CRYO_SOVEREIGN' && room === 100) {
+        hpValue = 12000000; // FINAL BOSS at Level 100 (trimmed)
+        shieldHp = 3000000;
     }
 
     let color = '#ef4444';
-    let shieldHp = 0;
 
     if (bossSubtype === 'TITAN') {
-        shieldHp = (room === 20 || !isUltra) ? (room === 20 ? 800 : hpValue * 0.4) : hpValue * 0.8;
+        shieldHp = (room === 20 || !isUltra) ? (room === 20 ? 3000 : hpValue * 0.4) : hpValue * 0.8;
         color = '#38bdf8';
     } else if (bossSubtype === 'STORM_BRINGER') {
         color = '#fbbf24'; 
@@ -1229,6 +1426,14 @@ export class GameEngine {
             shieldHp = 5000000;
         }
         color = '#f43f5e';
+    } else if (bossSubtype === 'CHRONO_WARDEN') {
+        color = '#fbbf24';
+    } else if (bossSubtype === 'GRAVITON_CORE') {
+        color = '#6366f1';
+    } else if (bossSubtype === 'PLAGUE_LORD') {
+        color = '#84cc16';
+    } else if (bossSubtype === 'CRYO_SOVEREIGN') {
+        color = '#67e8f9';
     }
 
     // Balance bot knob: global boss health multiplier (default 1.0)
@@ -1253,6 +1458,11 @@ export class GameEngine {
         bossStage: 1,
         bossAttackTimer: 0
     };
+
+    // BULWARK trait: milestone bosses (every 10 rooms) cannot be one-shot by burst volleys
+    if (room % 10 === 0) {
+        (boss as any).bulwarkTrait = true;
+    }
 
     // Equip bosses at room 30+ with powerful dynamic on/off periodic, directional, or rotating gap/hole force-fields
     if (room >= 30) {
@@ -1467,9 +1677,9 @@ export class GameEngine {
             }
           });
         } else if (field.type === 'temporal_freeze') {
-          // Completely freeze enemies inside the localized cursor radius
+          // Completely freeze enemies inside the localized cursor radius (bosses are immune)
           this.enemies.forEach(e => {
-            if (e.isDead) return;
+            if (e.isDead || e.isBoss) return;
             const dist = Math.hypot(e.pos.x - field.pos.x, e.pos.y - field.pos.y);
             if (dist < field.radius) {
               e.stunTimer = Math.max(e.stunTimer || 0, 0.2);
@@ -1487,6 +1697,100 @@ export class GameEngine {
               p.vel.y *= 0.1;
             }
           });
+
+        } else if (field.type === 'toxin_cloud') {
+          // Poison enemies inside the cloud continuously
+          field.poisonTimer = (field.poisonTimer || 0) + dt;
+          const poisonInterval = 1.0;
+          if (field.poisonTimer >= poisonInterval) {
+            field.poisonTimer = 0;
+            this.enemies.forEach(e => {
+              if (e.isDead) return;
+              const dist = Math.hypot(e.pos.x - field.pos.x, e.pos.y - field.pos.y);
+              if (dist < field.radius) {
+                const dmg = (field.poisonTick || 11) * 0.12;
+                this.damageEnemy(e, dmg, false, 'toxin_cloud', undefined, field.pos);
+              }
+            });
+          }
+
+        } else if (field.type === 'incendiary_blast') {
+          // Burn enemies inside the fire zone
+          field.burnTimer = (field.burnTimer || 0) + dt;
+          const burnInterval = 0.25;
+          if (field.burnTimer >= burnInterval) {
+            field.burnTimer = 0;
+            this.enemies.forEach(e => {
+              if (e.isDead) return;
+              const dist = Math.hypot(e.pos.x - field.pos.x, e.pos.y - field.pos.y);
+              if (dist < field.radius) {
+                const dmg = (field.burnDps || 14) * 0.25;
+                this.damageEnemy(e, dmg, false, 'incendiary_blast', undefined, field.pos);
+              }
+            });
+          }
+
+        } else if (field.type === 'arc_chain') {
+          // Chain lightning arcs between nearest enemies
+          if (field.arcsDone < (field.jumpCount || 2)) {
+            const baseTargets = this.enemies.filter(e => !e.isDead);
+            if (baseTargets.length === 0) {
+              field.arcsDone = field.jumpCount || 2;
+              return;
+            }
+
+            const start = field.pos;
+            let lastTarget: Vector | null = start;
+            const targets: Vector[] = [];
+
+            for (let i = 0; i < field.jumpCount; i++) {
+              // Nearest enemy within jump range of last target
+              let nearest: typeof this.enemies[0] | null = null;
+              let nearestDist = (field.jumpRange || 130) + 1;
+              for (const e of baseTargets) {
+                const d = Math.hypot(e.pos.x - lastTarget.x, e.pos.y - lastTarget.y);
+                if (d < nearestDist && d < (field.jumpRange || 130)) {
+                  nearestDist = d;
+                  nearest = e;
+                }
+              }
+              if (!nearest) break;
+              targets.push({ x: nearest.pos.x, y: nearest.pos.y });
+              lastTarget = nearest.pos;
+            }
+
+            if (targets.length === 0) {
+              field.arcsDone = field.jumpCount || 2;
+              return;
+            }
+
+            // Spawn arc segments
+            for (let i = 0; i < targets.length; i++) {
+              const from = lastTarget === null ? start : (i === 0 ? start : targets[i - 1]);
+              const to = targets[i];
+              field.arcTargets.push({
+                from,
+                to,
+                t: 0,
+                life: 0.35
+              });
+            }
+
+            // Stun + shock damage each target
+            for (const t of targets) {
+              const enemy = this.enemies.find(e => !e.isDead && Math.hypot(e.pos.x - t.x, e.pos.y - t.y) < 12);
+              if (enemy) {
+                enemy.stunTimer = Math.max(enemy.stunTimer || 0, 0.4);
+                const dmg = 18 + (field.level || 1) * 4;
+                this.damageEnemy(enemy, dmg, false, 'arc_chain', undefined, field.pos);
+              }
+            }
+            field.arcsDone += targets.length;
+          }
+
+          // Fade in-flight arc segments
+          field.arcTargets.forEach(a => { a.t += dt; });
+          field.arcTargets = field.arcTargets.filter(a => a.life > 0);
         }
       });
 
@@ -1577,13 +1881,13 @@ export class GameEngine {
 
       // Constant baseline drip-feed (40% of regen rate operates continuously with zero combat delay)
       const constantHeal = (this.player.stats.regen * 0.4) * dt * bossHealMult;
-      this.player.hp = Math.min(this.player.maxHp, this.player.hp + constantHeal);
+      this.player.hp = Math.min(this.player.maxHp, Math.max(1, this.player.hp) + constantHeal);
       this.player.healEffectTimer = 0.35;
 
       // Remaining portion (60%) triggers when outside the 2s damage delay
       if (now - this.player.lastDamageTime > regenDelay) {
         const delayedHeal = (this.player.stats.regen * 0.6) * dt * bossHealMult;
-        this.player.hp = Math.min(this.player.maxHp, this.player.hp + delayedHeal);
+        this.player.hp = Math.min(this.player.maxHp, Math.max(1, this.player.hp) + delayedHeal);
         this.player.healEffectTimer = 0.35;
       }
     }
@@ -1687,7 +1991,7 @@ export class GameEngine {
         const hasActiveBoss = this.enemies.some(e => e.isBoss && !e.isDead);
         const bossHealMult = hasActiveBoss ? 0.3 : 1.0;
         if (this.player.hp < this.player.maxHp) {
-            this.player.hp = Math.min(this.player.maxHp, this.player.hp + (healingRate * healingAura.level) * dt * bossHealMult);
+            this.player.hp = Math.min(this.player.maxHp, Math.max(1, this.player.hp) + (healingRate * healingAura.level) * dt * bossHealMult);
             this.player.healEffectTimer = 0.35;
         }
         const randLimit = healingAura.type === AbilityType.NANITE_AEGIS ? 0.35 : 0.15;
@@ -2022,7 +2326,7 @@ export class GameEngine {
         iz.duration -= dt;
         const distP = Math.hypot(this.player.pos.x - iz.pos.x, this.player.pos.y - iz.pos.y);
         if (distP < iz.radius) {
-            if (!this.player.spawnShieldTimer || this.player.spawnShieldTimer <= 0) {
+            if ((!this.player.spawnShieldTimer || this.player.spawnShieldTimer <= 0) && !this.player.isInvincible) {
                 this.player.hp = Math.max(1, this.player.hp - 10 * balance.enemyDmgMult * dt);
                 this.player.hurtTimer = 0.15;
             }
@@ -2117,24 +2421,68 @@ export class GameEngine {
           if (now - enemy.lastShot > teslaInterval) {
               const d = Math.hypot(this.player.pos.x - enemy.pos.x, this.player.pos.y - enemy.pos.y);
               if (d < 300) {
-                  this.player.hp -= 20 * balance.enemyDmgMult * (this.player.spawnShieldTimer && this.player.spawnShieldTimer > 0 ? 0 : 1);
-                  this.player.hurtTimer = 0.2;
-                  gameAudio.playHitSound(false, 'laser');
+                  const zapDamage = 20 * balance.enemyDmgMult * (this.player.spawnShieldTimer && this.player.spawnShieldTimer > 0 ? 0 : 1);
+                  this.damagePlayer(zapDamage);
                   enemy.lastShot = now;
-                  
-                  // Spark visual discharge arcing straight to player
-                  for (let i = 0; i <= 6; i++) {
-                      const ratio = i / 6;
+
+                  // Primary discharge: jagged lightning arc from the coil to the player,
+                  // drawn exactly like the player's Tesla Coil weapon zaps.
+                  this.particles.push({
+                      type: 'ARC',
+                      p1: { ...enemy.pos },
+                      p2: { ...this.player.pos },
+                      life: 0.25,
+                      color: '#c084fc'
+                  });
+                  // White-hot inner core bolt over the purple arc
+                  this.particles.push({
+                      type: 'ARC',
+                      p1: { ...enemy.pos },
+                      p2: { ...this.player.pos },
+                      life: 0.15,
+                      color: '#ffffff'
+                  });
+
+                  // Impact sparks at the player
+                  for (let i = 0; i < 5; i++) {
                       this.particles.push({
                           type: 'SPARK',
-                          pos: { 
-                              x: enemy.pos.x + (this.player.pos.x - enemy.pos.x) * ratio + (Math.random() - 0.5) * 12,
-                              y: enemy.pos.y + (this.player.pos.y - enemy.pos.y) * ratio + (Math.random() - 0.5) * 12
-                          },
-                          vel: { x: (Math.random() - 0.5) * 50, y: (Math.random() - 0.5) * 50 },
-                          life: 0.35,
+                          pos: { x: this.player.pos.x + (Math.random() - 0.5) * 14, y: this.player.pos.y + (Math.random() - 0.5) * 14 },
+                          vel: { x: (Math.random() - 0.5) * 160, y: (Math.random() - 0.5) * 160 },
+                          life: 0.3,
                           color: '#c084fc'
                       });
+                  }
+
+                  // Chain the zap onward through nearby player turrets and holographic clones,
+                  // mirroring how the weapon chains between enemies.
+                  const chained = new Set<string>();
+                  let lastPos = { ...this.player.pos };
+                  for (let c = 0; c < 2; c++) {
+                      let next: { pos: { x: number, y: number }, id?: string, turret?: any, clone?: any } | null = null;
+                      let bestDist = 160;
+                      for (const t of this.turrets) {
+                          if (t.hp <= 0 || chained.has('t' + t.id)) continue;
+                          const td = Math.hypot(t.pos.x - lastPos.x, t.pos.y - lastPos.y);
+                          if (td < bestDist) { bestDist = td; next = { pos: t.pos, id: 't' + t.id, turret: t }; }
+                      }
+                      for (const cl of this.clones) {
+                          if (chained.has('c' + cl.id)) continue;
+                          const cd = Math.hypot(cl.pos.x - lastPos.x, cl.pos.y - lastPos.y);
+                          if (cd < bestDist) { bestDist = cd; next = { pos: cl.pos, id: 'c' + cl.id, clone: cl }; }
+                      }
+                      if (!next) break;
+                      chained.add(next.id!);
+                      this.particles.push({
+                          type: 'ARC',
+                          p1: { ...lastPos },
+                          p2: { ...next.pos },
+                          life: 0.22,
+                          color: '#c084fc'
+                      });
+                      if (next.turret) next.turret.hp -= zapDamage * 0.5;
+                      if (next.clone) next.clone.life -= 0.5; // Zaps shave half a second off hologram uptime
+                      lastPos = { ...next.pos };
                   }
               }
           }
@@ -2272,7 +2620,7 @@ export class GameEngine {
               enemy.tetherTarget = { x: this.player.pos.x, y: this.player.pos.y };
               // Drain vitality from player
               const drainDamage = 12 * balance.enemyDmgMult * dt * timeWarpFactor;
-              if (!this.player.spawnShieldTimer || this.player.spawnShieldTimer <= 0) {
+              if ((!this.player.spawnShieldTimer || this.player.spawnShieldTimer <= 0) && !this.player.isInvincible) {
                   this.player.hp = Math.max(1, this.player.hp - drainDamage);
                   this.player.hurtTimer = 0.15;
               }
@@ -2310,6 +2658,144 @@ export class GameEngine {
               }
           } else {
               enemy.tetherTarget = undefined;
+          }
+      }
+
+      if (enemy.enemyType === 'VOID_MARAUDER') {
+          // Blink predator: every few seconds it teleports a short hop toward the player, then lunges
+          if (enemy.blinkCooldown === undefined) enemy.blinkCooldown = 2.5 + Math.random() * 2;
+          enemy.blinkCooldown -= dt * timeWarpFactor;
+          if (enemy.blinkCooldown <= 0) {
+              enemy.blinkCooldown = 3.5 + Math.random() * 2;
+              const angle = Math.atan2(this.player.pos.y - enemy.pos.y, this.player.pos.x - enemy.pos.x);
+              const hopDist = 160;
+              this.particles.push({
+                  type: 'WARP',
+                  pos: { ...enemy.pos },
+                  radius: 0,
+                  maxRadius: 50,
+                  life: 0.35,
+                  color: '#a78bfa'
+              });
+              enemy.pos.x += Math.cos(angle) * hopDist;
+              enemy.pos.y += Math.sin(angle) * hopDist;
+              this.particles.push({
+                  type: 'WARP',
+                  pos: { ...enemy.pos },
+                  radius: 0,
+                  maxRadius: 50,
+                  life: 0.35,
+                  color: '#c4b5fd'
+              });
+              // Lunge burst after the blink
+              enemy.vel.x = Math.cos(angle) * 420;
+              enemy.vel.y = Math.sin(angle) * 420;
+          }
+      }
+
+      if (enemy.enemyType === 'TIME_EATER') {
+          // Temporal parasite: pulses a slowing aura and fires chrono bolts
+          if (enemy.timeAuraTimer === undefined) enemy.timeAuraTimer = 0;
+          enemy.timeAuraTimer += dt * timeWarpFactor;
+          const dTe = Math.hypot(this.player.pos.x - enemy.pos.x, this.player.pos.y - enemy.pos.y);
+          if (dTe < 200) {
+              // Slow the player while inside the temporal field
+              this.player.vel.x *= (1 - 0.5 * dt);
+              this.player.vel.y *= (1 - 0.5 * dt);
+              if (Math.random() < 0.1) {
+                  this.particles.push({
+                      type: 'SPARK',
+                      pos: { x: this.player.pos.x + (Math.random() - 0.5) * 30, y: this.player.pos.y + (Math.random() - 0.5) * 30 },
+                      vel: { x: 0, y: -30 },
+                      life: 0.4,
+                      color: '#fbbf24'
+                  });
+              }
+          }
+          if (enemy.timeAuraTimer >= 2.8) {
+              enemy.timeAuraTimer = 0;
+              const angle = Math.atan2(this.player.pos.y - enemy.pos.y, this.player.pos.x - enemy.pos.x);
+              this.projectiles.push({
+                  pos: { ...enemy.pos },
+                  vel: { x: Math.cos(angle) * 340, y: Math.sin(angle) * 340 },
+                  radius: 7,
+                  damage: 16,
+                  ownerId: enemy.id,
+                  color: '#fde68a',
+                  isIce: true as any
+              });
+          }
+      }
+
+      if (enemy.enemyType === 'SINGULARITY_SEED') {
+          // Collapsing core: when killed (or timer expires) it implodes into a damaging gravity well
+          if (enemy.collapseTimer === undefined) enemy.collapseTimer = 8 + Math.random() * 4;
+          enemy.collapseTimer -= dt * timeWarpFactor;
+          const dSs = Math.hypot(this.player.pos.x - enemy.pos.x, this.player.pos.y - enemy.pos.y);
+          if (dSs < 220) {
+              // Gentle constant pull toward the seed
+              const ang = Math.atan2(enemy.pos.y - this.player.pos.y, enemy.pos.x - this.player.pos.x);
+              this.player.pos.x += Math.cos(ang) * 90 * dt * timeWarpFactor;
+              this.player.pos.y += Math.sin(ang) * 90 * dt * timeWarpFactor;
+          }
+          if (enemy.collapseTimer <= 0 && !enemy.isDead) {
+              // Self-collapse: gravity explosion
+              this.explodeBomb({ pos: { ...enemy.pos }, radius: 170, damage: 22, color: '#6366f1' });
+              enemy.isDead = true;
+              enemy.hp = 0;
+          }
+      }
+
+      if (enemy.enemyType === 'PLAGUE_SPREADER') {
+          // Contagion carrier: pulses plague clouds that linger and damage the player
+          if (enemy.plagueTimer === undefined) enemy.plagueTimer = 2 + Math.random() * 2;
+          enemy.plagueTimer -= dt * timeWarpFactor;
+          if (enemy.plagueTimer <= 0) {
+              enemy.plagueTimer = 4.0;
+              this.warpZones.push({
+                  id: Math.random().toString(),
+                  pos: { x: enemy.pos.x + (Math.random() - 0.5) * 80, y: enemy.pos.y + (Math.random() - 0.5) * 80 },
+                  radius: 100,
+                  duration: 5.0,
+                  maxDuration: 5.0
+              });
+              this.particles.push({
+                  type: 'WARP',
+                  pos: { ...enemy.pos },
+                  radius: 0,
+                  maxRadius: 70,
+                  life: 0.4,
+                  color: '#84cc16'
+              });
+          }
+      }
+
+      if (enemy.enemyType === 'FROST_TYRANT') {
+          // Blizzard tyrant: periodic radial ice shard burst that chills whatever it touches
+          if (enemy.blizzardTimer === undefined) enemy.blizzardTimer = 3 + Math.random() * 2;
+          enemy.blizzardTimer -= dt * timeWarpFactor;
+          if (enemy.blizzardTimer <= 0) {
+              enemy.blizzardTimer = 4.5;
+              const shardCount = 10;
+              for (let i = 0; i < shardCount; i++) {
+                  const radAng = (Math.PI * 2 / shardCount) * i + Math.random() * 0.3;
+                  this.projectiles.push({
+                      pos: { ...enemy.pos },
+                      vel: { x: Math.cos(radAng) * 280, y: Math.sin(radAng) * 280 },
+                      radius: 5,
+                      damage: 13,
+                      ownerId: enemy.id,
+                      color: '#a5f3fc',
+                      isIce: true as any
+                  });
+              }
+              this.particles.push({
+                  type: 'SNOW',
+                  pos: { ...enemy.pos },
+                  vel: { x: (Math.random() - 0.5) * 60, y: -Math.random() * 60 },
+                  life: 0.6,
+                  color: '#e0f2fe'
+              });
           }
       }
 
@@ -2385,7 +2871,13 @@ export class GameEngine {
           }
       }
 
-      if (enemy.isFrozen) {
+      // Bosses shake off freeze effects instantly: they are always moving.
+      if (enemy.isBoss && enemy.isFrozen) {
+          enemy.isFrozen = false;
+          enemy.freezeTimer = 0;
+      }
+
+      if (enemy.isFrozen && !enemy.isBoss) {
           enemy.freezeTimer = (enemy.freezeTimer || 0) - dt;
           if (enemy.freezeTimer <= 0) {
               enemy.isFrozen = false;
@@ -2401,9 +2893,10 @@ export class GameEngine {
       }
 
       // Ensure slow cannot reduce movement to 0 (minimum speed floor of 30% so all enemies can always move)
+      // Bosses are immune to slows, stuns and time-warp entirely: they are always moving.
       const slowReduction = (this.player.stats.projectileSlow || 0);
-      const enemySlowFactor = enemy.isSlowed ? Math.max(0.30, 1.0 - slowReduction) : 1.0;
-      const speedFactor = Math.max(0.28, enemySlowFactor * timeWarpFactor);
+      const enemySlowFactor = (enemy.isSlowed && !enemy.isBoss) ? Math.max(0.30, 1.0 - slowReduction) : 1.0;
+      const speedFactor = enemy.isBoss ? 1.0 : Math.max(0.28, enemySlowFactor * timeWarpFactor);
       this.updateBall(enemy, dt * speedFactor);
 
       // Movement behavior:
@@ -2553,7 +3046,7 @@ export class GameEngine {
           // Boss Movement System:
           // All bosses actively follow the player, unless executing a specific phase with a dedicated movement path!
           if (enemy.bossSubtype !== 'NEXUS_OVERLORD') {
-              const baseSpeed = (enemy.bossSubtype === 'PHANTOM_ACE' ? 240 : (enemy.bossSubtype === 'TITAN' ? 140 : (enemy.bossSubtype === 'SWARM_QUEEN' ? 220 : 185)));
+              const baseSpeed = (enemy.bossSubtype === 'PHANTOM_ACE' ? 190 : (enemy.bossSubtype === 'TITAN' ? 140 : (enemy.bossSubtype === 'SWARM_QUEEN' ? 220 : 185)));
               const bossSpeed = baseSpeed * (enemy.bossStage === 3 ? 1.35 : (enemy.bossStage === 2 ? 1.15 : 1.0));
               const arenaW = this.width || 1200;
               const arenaH = this.height || 800;
@@ -2634,6 +3127,68 @@ export class GameEngine {
                       if (dist > 15) {
                           enemy.vel.x += (dx / dist) * bossSpeed * 2.0 * dt;
                           enemy.vel.y += (dy / dist) * bossSpeed * 2.0 * dt;
+                      }
+                  } else if (enemy.bossSubtype === 'CHRONO_WARDEN') {
+                      // PHASE DRIFT: glides in slow looping arcs, phasing through space
+                      customPathHandled = true;
+                      const t = now * 0.0012;
+                      const targetX = this.player.pos.x + Math.cos(t) * 260;
+                      const targetY = this.player.pos.y + Math.sin(t * 1.3) * 200;
+                      const dx = targetX - enemy.pos.x;
+                      const dy = targetY - enemy.pos.y;
+                      const dist = Math.hypot(dx, dy);
+                      if (dist > 10) {
+                          enemy.vel.x += (dx / dist) * bossSpeed * 2.2 * dt;
+                          enemy.vel.y += (dy / dist) * bossSpeed * 2.2 * dt;
+                      }
+                  } else if (enemy.bossSubtype === 'GRAVITON_CORE') {
+                      // PENDULUM SWING: heavy pendulum sweeps across the arena
+                      customPathHandled = true;
+                      const t = now * 0.0009;
+                      const targetX = arenaW / 2 + Math.sin(t) * (arenaW * 0.4);
+                      const targetY = arenaH * 0.35 + Math.abs(Math.cos(t)) * (arenaH * 0.25);
+                      const dx = targetX - enemy.pos.x;
+                      const dy = targetY - enemy.pos.y;
+                      const dist = Math.hypot(dx, dy);
+                      if (dist > 10) {
+                          enemy.vel.x += (dx / dist) * bossSpeed * 2.4 * dt;
+                          enemy.vel.y += (dy / dist) * bossSpeed * 2.4 * dt;
+                      }
+                  } else if (enemy.bossSubtype === 'PLAGUE_LORD') {
+                      // BILE DRIFT: slow menacing advance, spewing contagion clouds behind it
+                      customPathHandled = true;
+                      const dx = this.player.pos.x - enemy.pos.x;
+                      const dy = this.player.pos.y - enemy.pos.y;
+                      const dist = Math.hypot(dx, dy);
+                      if (dist > 180) {
+                          enemy.vel.x += (dx / dist) * bossSpeed * 1.2 * dt;
+                          enemy.vel.y += (dy / dist) * bossSpeed * 1.2 * dt;
+                      } else {
+                          // Slow strafe when close
+                          enemy.vel.x += Math.cos(now * 0.001) * bossSpeed * dt;
+                          enemy.vel.y += Math.sin(now * 0.0013) * bossSpeed * dt;
+                      }
+                  } else if (enemy.bossSubtype === 'CRYO_SOVEREIGN') {
+                      // GLACIAL DESCENT: relentless slow approach, frost aura expands in stage 2+
+                      customPathHandled = true;
+                      const dx = this.player.pos.x - enemy.pos.x;
+                      const dy = this.player.pos.y - enemy.pos.y;
+                      const dist = Math.hypot(dx, dy);
+                      if (dist > 220) {
+                          enemy.vel.x += (dx / dist) * bossSpeed * 1.6 * dt;
+                          enemy.vel.y += (dy / dist) * bossSpeed * 1.6 * dt;
+                      } else {
+                          // Circle the player at close range
+                          const orbitAng = now * 0.0016;
+                          const targetX = this.player.pos.x + Math.cos(orbitAng) * 200;
+                          const targetY = this.player.pos.y + Math.sin(orbitAng) * 200;
+                          const ddx = targetX - enemy.pos.x;
+                          const ddy = targetY - enemy.pos.y;
+                          const dd = Math.hypot(ddx, ddy);
+                          if (dd > 10) {
+                              enemy.vel.x += (ddx / dd) * bossSpeed * 2.0 * dt;
+                              enemy.vel.y += (ddy / dd) * bossSpeed * 2.0 * dt;
+                          }
                       }
                   }
               }
@@ -2775,7 +3330,7 @@ export class GameEngine {
                       this.explodeBomb({
                           pos: { ...enemy.pos },
                           radius: 170,
-                          damage: 20,
+                          damage: 12, // Nerfed from 20
                           color: '#0284c7'
                       });
                       for (let i = -2; i <= 2; i++) {
@@ -2808,31 +3363,31 @@ export class GameEngine {
           }
 
           else if (enemy.bossSubtype === 'PHANTOM_ACE') {
-              const interval = enemy.bossStage === 3 ? 0.9 : (enemy.bossStage === 2 ? 1.5 : 2.5);
+              const interval = enemy.bossStage === 3 ? 1.3 : (enemy.bossStage === 2 ? 2.0 : 3.2);
               if (enemy.bossAttackTimer >= interval) {
                   enemy.bossAttackTimer = 0;
                   
                   const angle = Math.atan2(this.player.pos.y - enemy.pos.y, this.player.pos.x - enemy.pos.x);
                   
                   if (enemy.bossStage === 3) {
-                      // Stage 3: Instant Warp behind player + 18-needle starburst
+                      // Stage 3: Instant Warp behind player + needle starburst
                       const warpDist = 140;
                       enemy.pos.x = this.player.pos.x - Math.cos(angle) * warpDist;
                       enemy.pos.y = this.player.pos.y - Math.sin(angle) * warpDist;
                       
-                      for (let i = 0; i < 18; i++) {
-                          const needleAng = (Math.PI * 2 / 18) * i;
+                      for (let i = 0; i < 13; i++) {
+                          const needleAng = (Math.PI * 2 / 13) * i;
                           this.shootProjectile(enemy, {
                               x: enemy.pos.x + Math.cos(needleAng) * 90,
                               y: enemy.pos.y + Math.sin(needleAng) * 90
                           });
                       }
                   } else {
-                      // Sudden teleport dash & leave projectiles
-                      enemy.vel.x = Math.cos(angle) * (enemy.bossStage === 2 ? 1500 : 1000);
-                      enemy.vel.y = Math.sin(angle) * (enemy.bossStage === 2 ? 1500 : 1000);
+                      // Sudden teleport dash & leave projectiles (slowed down so ranged/shotgun users can keep it in range)
+                      enemy.vel.x = Math.cos(angle) * (enemy.bossStage === 2 ? 1050 : 700);
+                      enemy.vel.y = Math.sin(angle) * (enemy.bossStage === 2 ? 1050 : 700);
                       
-                      const count = enemy.bossStage === 2 ? 12 : 6;
+                      const count = enemy.bossStage === 2 ? 9 : 5;
                       for (let i = 0; i < count; i++) {
                           const needleAng = angle + (Math.PI * 2 / count) * i;
                           this.shootProjectile(enemy, {
@@ -2841,8 +3396,8 @@ export class GameEngine {
                           });
                       }
                       
-                      // Spawn decoy phantom
-                      if (enemy.bossStage === 2 && Math.random() < 0.45 && this.enemies.length < 15) {
+                      // Spawn decoy phantom (less frequent: fewer fake targets for ranged aiming)
+                      if (enemy.bossStage === 2 && Math.random() < 0.3 && this.enemies.length < 15) {
                           const decoy: EnemyBall = {
                               id: 'decoy-' + Math.random(),
                               type: EntityType.ENEMY_BALL,
@@ -3010,6 +3565,264 @@ export class GameEngine {
                   } else {
                       // Stage 1: Basic scythe strike
                       this.shootProjectile(enemy, this.player.pos);
+                  }
+              }
+          }
+
+          else if (enemy.bossSubtype === 'CHRONO_WARDEN') {
+              const cooldown = enemy.bossStage === 3 ? 1.0 : (enemy.bossStage === 2 ? 1.6 : 2.4);
+              if (enemy.bossAttackTimer >= cooldown) {
+                  enemy.bossAttackTimer = 0;
+                  const angle = Math.atan2(this.player.pos.y - enemy.pos.y, this.player.pos.x - enemy.pos.x);
+
+                  if (enemy.bossStage === 3) {
+                      // Stage 3: TEMPORAL COLLAPSE: rewinds itself to full stage-1 speed and unleashes a triple time-lag volley
+                      for (let wave = 0; wave < 3; wave++) {
+                          setTimeout(() => {
+                              if (!enemy.isDead && !this.player.isDead) {
+                                  for (let i = -2; i <= 2; i++) {
+                                      const sAng = angle + i * 0.2;
+                                      this.shootProjectile(enemy, {
+                                          x: enemy.pos.x + Math.cos(sAng) * 120,
+                                          y: enemy.pos.y + Math.sin(sAng) * 120
+                                      });
+                                  }
+                              }
+                          }, wave * 220);
+                      }
+                      // Echo strike: damage rift at the player's position from 1.5s ago (approximated by current pos)
+                      this.explodeBomb({ pos: { ...this.player.pos }, radius: 110, damage: 18, color: '#fbbf24' });
+                  } else if (enemy.bossStage === 2) {
+                      // Stage 2: TIME LOCK: fires a slowing chronos bolt then a fast follow-up spread
+                      this.projectiles.push({
+                          pos: { ...enemy.pos },
+                          vel: { x: Math.cos(angle) * 300, y: Math.sin(angle) * 300 },
+                          radius: 9,
+                          damage: 14,
+                          ownerId: enemy.id,
+                          color: '#fde68a',
+                          isIce: true as any
+                      });
+                      setTimeout(() => {
+                          if (!enemy.isDead && !this.player.isDead) {
+                              const a2 = Math.atan2(this.player.pos.y - enemy.pos.y, this.player.pos.x - enemy.pos.x);
+                              for (let i = -3; i <= 3; i++) {
+                                  const sAng = a2 + i * 0.16;
+                                  this.shootProjectile(enemy, {
+                                      x: enemy.pos.x + Math.cos(sAng) * 130,
+                                      y: enemy.pos.y + Math.sin(sAng) * 130
+                                  });
+                              }
+                          }
+                      }, 350);
+                  } else {
+                      // Stage 1: Twin chrono lances that split mid-flight (2 shots)
+                      for (const side of [-0.14, 0.14]) {
+                          this.shootProjectile(enemy, {
+                              x: enemy.pos.x + Math.cos(angle + side) * 110,
+                              y: enemy.pos.y + Math.sin(angle + side) * 110
+                          });
+                      }
+                  }
+              }
+          }
+
+          else if (enemy.bossSubtype === 'GRAVITON_CORE') {
+              const cooldown = enemy.bossStage === 3 ? 1.3 : (enemy.bossStage === 2 ? 2.0 : 3.0);
+              if (enemy.bossAttackTimer >= cooldown) {
+                  enemy.bossAttackTimer = 0;
+                  const angle = Math.atan2(this.player.pos.y - enemy.pos.y, this.player.pos.x - enemy.pos.x);
+
+                  // Singularity pull: constant drag toward the core, stronger in later stages
+                  const pullForce = enemy.bossStage === 3 ? 520 : (enemy.bossStage === 2 ? 380 : 260);
+                  this.player.vel.x -= Math.cos(angle) * pullForce;
+                  this.player.vel.y -= Math.sin(angle) * pullForce;
+
+                  if (enemy.bossStage === 3) {
+                      // Stage 3: EVENT COLLAPSE: 20-way gravity shockwave + heavy slams
+                      for (let i = 0; i < 20; i++) {
+                          const radAng = (Math.PI * 2 / 20) * i + (now * 0.001);
+                          this.shootProjectile(enemy, {
+                              x: enemy.pos.x + Math.cos(radAng) * 150,
+                              y: enemy.pos.y + Math.sin(radAng) * 150
+                          });
+                      }
+                      this.explodeBomb({ pos: { ...enemy.pos }, radius: 200, damage: 16, color: '#6366f1' });
+                  } else if (enemy.bossStage === 2) {
+                      // Stage 2: Orbiting debris barrage: 12-way + 4 aimed slugs
+                      for (let i = 0; i < 12; i++) {
+                          const radAng = (Math.PI * 2 / 12) * i;
+                          this.shootProjectile(enemy, {
+                              x: enemy.pos.x + Math.cos(radAng) * 140,
+                              y: enemy.pos.y + Math.sin(radAng) * 140
+                          });
+                      }
+                      for (let i = -1; i <= 2; i++) {
+                          const sAng = angle + i * 0.18;
+                          this.shootProjectile(enemy, {
+                              x: enemy.pos.x + Math.cos(sAng) * 160,
+                              y: enemy.pos.y + Math.sin(sAng) * 160
+                          });
+                      }
+                  } else {
+                      // Stage 1: 6-way gravity pulse
+                      for (let i = 0; i < 6; i++) {
+                          const radAng = (Math.PI * 2 / 6) * i;
+                          this.shootProjectile(enemy, {
+                              x: enemy.pos.x + Math.cos(radAng) * 120,
+                              y: enemy.pos.y + Math.sin(radAng) * 120
+                          });
+                      }
+                  }
+              }
+          }
+
+          else if (enemy.bossSubtype === 'PLAGUE_LORD') {
+              const cooldown = enemy.bossStage === 3 ? 1.1 : (enemy.bossStage === 2 ? 1.7 : 2.6);
+              if (enemy.bossAttackTimer >= cooldown) {
+                  enemy.bossAttackTimer = 0;
+                  const angle = Math.atan2(this.player.pos.y - enemy.pos.y, this.player.pos.x - enemy.pos.x);
+
+                  if (enemy.bossStage === 3) {
+                      // Stage 3: PANDEMIC BURST: 16-way spore ring + summons 2 BIO_LEECH thralls
+                      for (let i = 0; i < 16; i++) {
+                          const radAng = (Math.PI * 2 / 16) * i + (now * 0.0008);
+                          this.shootProjectile(enemy, {
+                              x: enemy.pos.x + Math.cos(radAng) * 130,
+                              y: enemy.pos.y + Math.sin(radAng) * 130
+                          });
+                      }
+                      if (this.enemies.length < 22) {
+                          for (let i = 0; i < 2; i++) {
+                              const sAng = Math.random() * Math.PI * 2;
+                              const leech: EnemyBall = {
+                                  id: 'plague-thral-' + Math.random(),
+                                  type: EntityType.ENEMY_BALL,
+                                  enemyType: 'BIO_LEECH',
+                                  pos: { x: enemy.pos.x + Math.cos(sAng) * 70, y: enemy.pos.y + Math.sin(sAng) * 70 },
+                                  vel: { x: Math.cos(sAng) * 180, y: Math.sin(sAng) * 180 },
+                                  radius: 16,
+                                  hp: 900,
+                                  maxHp: 900,
+                                  color: '#84cc16',
+                                  isDead: false
+                              };
+                              this.enemies.push(leech);
+                          }
+                      }
+                      // Contagion explosion at feet
+                      this.explodeBomb({ pos: { ...enemy.pos }, radius: 160, damage: 14, color: '#84cc16' });
+                  } else if (enemy.bossStage === 2) {
+                      // Stage 2: Viral spread: 3 lobbed spore clusters that burst into shards
+                      for (let i = -1; i <= 1; i++) {
+                          const sAng = angle + i * 0.3;
+                          this.shootProjectile(enemy, {
+                              x: enemy.pos.x + Math.cos(sAng) * 120,
+                              y: enemy.pos.y + Math.sin(sAng) * 120
+                          });
+                      }
+                      // Summon 1 leech thrall
+                      if (this.enemies.length < 22) {
+                          const sAng = Math.random() * Math.PI * 2;
+                          const leech: EnemyBall = {
+                              id: 'plague-thral-' + Math.random(),
+                              type: EntityType.ENEMY_BALL,
+                              enemyType: 'BIO_LEECH',
+                              pos: { x: enemy.pos.x + Math.cos(sAng) * 70, y: enemy.pos.y + Math.sin(sAng) * 70 },
+                              vel: { x: Math.cos(sAng) * 180, y: Math.sin(sAng) * 180 },
+                              radius: 16,
+                              hp: 900,
+                              maxHp: 900,
+                              color: '#84cc16',
+                              isDead: false
+                          };
+                          this.enemies.push(leech);
+                      }
+                  } else {
+                      // Stage 1: Single heavy spore lob + 2 side spores
+                      this.shootProjectile(enemy, this.player.pos);
+                      for (const side of [-0.35, 0.35]) {
+                          this.shootProjectile(enemy, {
+                              x: enemy.pos.x + Math.cos(angle + side) * 110,
+                              y: enemy.pos.y + Math.sin(angle + side) * 110
+                          });
+                      }
+                  }
+              }
+          }
+
+          else if (enemy.bossSubtype === 'CRYO_SOVEREIGN') {
+              const cooldown = enemy.bossStage === 3 ? 0.9 : (enemy.bossStage === 2 ? 1.4 : 2.2);
+              if (enemy.bossAttackTimer >= cooldown) {
+                  enemy.bossAttackTimer = 0;
+                  const angle = Math.atan2(this.player.pos.y - enemy.pos.y, this.player.pos.x - enemy.pos.x);
+
+                  if (enemy.bossStage === 3) {
+                      // Stage 3: ABSOLUTE ZERO: full-screen blizzard (24-way ice storm) + freezing breath cone + shard nova
+                      for (let i = 0; i < 24; i++) {
+                          const radAng = (Math.PI * 2 / 24) * i + (now * 0.0012);
+                          this.projectiles.push({
+                              pos: { ...enemy.pos },
+                              vel: { x: Math.cos(radAng) * 340, y: Math.sin(radAng) * 340 },
+                              radius: 6,
+                              damage: 16,
+                              ownerId: enemy.id,
+                              color: '#a5f3fc',
+                              isIce: true as any
+                          });
+                      }
+                      // Triple freezing breath cone at the player
+                      for (let i = -2; i <= 2; i++) {
+                          const sAng = angle + i * 0.14;
+                          this.projectiles.push({
+                              pos: { ...enemy.pos },
+                              vel: { x: Math.cos(sAng) * 420, y: Math.sin(sAng) * 420 },
+                              radius: 8,
+                              damage: 20,
+                              ownerId: enemy.id,
+                              color: '#67e8f9',
+                              isIce: true as any
+                          });
+                      }
+                      this.explodeBomb({ pos: { ...enemy.pos }, radius: 180, damage: 15, color: '#67e8f9' });
+                  } else if (enemy.bossStage === 2) {
+                      // Stage 2: GLACIAL SPIRALS: dual counter-rotating ice spirals + 6-way shard burst
+                      for (let i = 0; i < 8; i++) {
+                          const a1 = (Math.PI * 2 / 8) * i + (now * 0.002);
+                          const a2 = (Math.PI * 2 / 8) * i - (now * 0.002);
+                          this.projectiles.push({
+                              pos: { ...enemy.pos },
+                              vel: { x: Math.cos(a1) * 300, y: Math.sin(a1) * 300 },
+                              radius: 6,
+                              damage: 14,
+                              ownerId: enemy.id,
+                              color: '#a5f3fc',
+                              isIce: true as any
+                          });
+                          this.projectiles.push({
+                              pos: { ...enemy.pos },
+                              vel: { x: Math.cos(a2) * 260, y: Math.sin(a2) * 260 },
+                              radius: 6,
+                              damage: 14,
+                              ownerId: enemy.id,
+                              color: '#22d3ee',
+                              isIce: true as any
+                          });
+                      }
+                  } else {
+                      // Stage 1: Frost volley: 4 aimed ice shards in a narrow fan
+                      for (let i = -1.5; i <= 1.5; i++) {
+                          const sAng = angle + i * 0.18;
+                          this.projectiles.push({
+                              pos: { ...enemy.pos },
+                              vel: { x: Math.cos(sAng) * 380, y: Math.sin(sAng) * 380 },
+                              radius: 6,
+                              damage: 12,
+                              ownerId: enemy.id,
+                              color: '#a5f3fc',
+                              isIce: true as any
+                          });
+                      }
                   }
               }
           }
@@ -3343,7 +4156,9 @@ export class GameEngine {
 
     this.projectiles = this.projectiles.filter(p => {
       const projDt = (p.ownerId !== 'player') ? (dt * timeWarpFactor) : dt;
-      if (p.homing) {
+      // Piercing rounds never home: steering back toward an already-hit enemy would trap
+      // them in a tight stationary orbit after passing through. They must keep flying straight.
+      if (p.homing && !(p.piercing && p.piercing > 0)) {
           let target = p.targetId ? this.enemies.find(e => e.id === p.targetId) : null;
           if (!target) {
               target = this.getNearestEnemyTo(p.pos);
@@ -3556,7 +4371,7 @@ export class GameEngine {
         
         // Damage player on contact (scaled reasonably for early sectors 1-10 and 11-20)
         if (enemy.isBoss) {
-            const bossContact = (enemy.bossSubtype === 'WARRIOR' || this.currentRoom <= 10) ? 20 : (enemy.bossSubtype === 'TITAN' || this.currentRoom <= 20) ? 35 : 75;
+            const bossContact = (enemy.bossSubtype === 'WARRIOR' || this.currentRoom <= 10) ? 20 : enemy.bossSubtype === 'TITAN' ? 25 : (this.currentRoom <= 20 ? 35 : this.currentRoom <= 40 ? 55 : 45);
             this.damagePlayer(bossContact);
         } else {
             let contactDmg = this.currentRoom <= 10 ? 8 : (this.currentRoom <= 20 ? 14 : 25);
@@ -3843,6 +4658,7 @@ export class GameEngine {
         const isEvo = ability.type === AbilityType.ABSOLUTE_ZERO_RIPPLE;
         const radius = (isEvo ? 650 : 400) + ability.level * 50;
         this.enemies.forEach(e => {
+            if (e.isDead || e.isBoss) return; // Bosses cannot be frozen solid: they are always moving
             if (Math.hypot(e.pos.x - this.player.pos.x, e.pos.y - this.player.pos.y) < radius) {
                 e.isFrozen = true;
                 e.freezeTimer = (isEvo ? 5 : 3) + ability.level;
@@ -4708,6 +5524,7 @@ export class GameEngine {
         if (isUlt) {
             // Chronos Time-Dilation Zone (260px radius) - Freeze enemies by 85%
             this.enemies.forEach(enemy => {
+                if (enemy.isDead || enemy.isBoss) return; // Bosses are immune to stasis slowdown
                 const dist = Math.hypot(enemy.pos.x - player.pos.x, enemy.pos.y - player.pos.y);
                 if (dist < 260) {
                     enemy.vel.x *= 0.15;
@@ -5929,7 +6746,9 @@ export class GameEngine {
         // Boss attacks: considerably bigger projectiles, doing less damage!
         if ((from as any).bossSubtype === 'WARRIOR' || this.currentRoom <= 10) {
           finalDamage *= 0.35;
-        } else if ((from as any).bossSubtype === 'TITAN' || this.currentRoom <= 20) {
+        } else if ((from as any).bossSubtype === 'TITAN') {
+          finalDamage *= 0.30; // Level 20 Titan: projectile damage nerfed
+        } else if (this.currentRoom <= 20) {
           finalDamage *= 0.45;
         } else {
           finalDamage *= 0.60;
@@ -6090,9 +6909,9 @@ export class GameEngine {
     finalDamage *= balance.enemyDmgMult;
     
     if (this.player.hp - finalDamage <= 0 && this.player.hp > this.player.maxHp * 0.15 && Math.random() < 0.85) {
-        // One-Shot Protection: Defy fatal blow and gate the player at 1% to 10% health
-        const safeguardHpPct = 0.01 + Math.random() * 0.09;
-        this.player.hp = this.player.maxHp * safeguardHpPct;
+        // One-Shot Protection: Defy fatal blow and gate the player at 2% to 10% health
+        const safeguardHpPct = 0.02 + Math.random() * 0.08;
+        this.player.hp = Math.max(1, this.player.maxHp * safeguardHpPct);
         
         // Push a visual message so user knows the clutch cheat was activated!
         this.floatingTexts.push({
@@ -6123,6 +6942,7 @@ export class GameEngine {
         gameAudio.playHitSound(true); // punchy feedback
     } else {
         this.player.hp -= finalDamage;
+        if (this.player.hp < 1) this.player.hp = 0;
     }
     
     this.player.hurtTimer = 0.2;
@@ -6473,9 +7293,27 @@ export class GameEngine {
         });
     }
 
+    // BULWARK trait (Room 10/20 milestone bosses): rolling damage window makes one-shot
+    // bursts impossible while leaving sustained DPS fully effective.
+    if ((enemy as any).bulwarkTrait) {
+        const now = Date.now();
+        const anyEnemy = enemy as any;
+        if (!anyEnemy.bulwarkWinStart || now - anyEnemy.bulwarkWinStart >= BULWARK_WINDOW_MS) {
+            anyEnemy.bulwarkWinStart = now;
+            anyEnemy.bulwarkWinDmg = 0;
+        }
+        const windowRemaining = enemy.maxHp * BULWARK_WINDOW_HP_CAP - (anyEnemy.bulwarkWinDmg || 0);
+        if (windowRemaining <= 0) {
+            return true; // window exhausted: the excess volley is absorbed
+        }
+        amt = Math.min(amt, windowRemaining);
+        anyEnemy.bulwarkWinDmg = (anyEnemy.bulwarkWinDmg || 0) + amt;
+    }
+
     if (enemy.shieldHp && enemy.shieldHp > 0) {
-        const toShield = Math.min(enemy.shieldHp, amt);
-        enemy.shieldHp -= toShield;
+        // Shields always fully absorb the first hit: the hit only breaks the shield and
+        // never leaks into health, so a shielded enemy can never be one-shot.
+        enemy.shieldHp = Math.max(0, enemy.shieldHp - amt);
         
         // Visual shield spark
         this.particles.push({
@@ -6488,11 +7326,6 @@ export class GameEngine {
             life: 0.5,
             color: '#38bdf8'
         });
-        
-        const remaining = amt - toShield;
-        if (remaining > 0) {
-            enemy.hp -= remaining;
-        }
     } else {
         enemy.hp -= amt;
     }

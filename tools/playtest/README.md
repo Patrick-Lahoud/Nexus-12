@@ -1,7 +1,7 @@
 # AI Playtesting & Balance Bot
 
 Headless AI playtesting for **Boundless Blade** against the *real* game engine
-(no browser, no canvas, no audio). Drives full CAMPAIGN attempts (rooms 1–100,
+(no browser, no canvas, no audio). Drives full CAMPAIGN attempts (rooms 1-100,
 boss every 10) with probabilistic human-like player policies, audits
 progression against the spec's attempt benchmarks, and can micro-adjust global
 enemy difficulty with delta caps + rollback.
@@ -39,8 +39,8 @@ Flags: `--runs`, `--policy=all|aggressive|defensive|glasscannon`, `--tune`,
 | `src/game/balance.ts` | Neutral (1.0) tunables registry consumed by the engine |
 
 Engine changes are confined to choke points: enemy/boss HP at spawn and
-player-damage application (including the three raw damage paths — TESLA_COIL
-zaps, PLASMA_STORMER ion zones, BIO_LEECH drains — which otherwise bypass the
+player-damage application (including the three raw damage paths: TESLA_COIL
+zaps, PLASMA_STORMER ion zones, BIO_LEECH drains, which otherwise bypass the
 damage pipeline). All knobs default to 1.0, so shipping gameplay is unchanged.
 
 ## Spec mapping & assumptions
@@ -65,8 +65,8 @@ damage pipeline). All knobs default to 1.0, so shipping gameplay is unchanged.
 ## Findings from the first sessions
 
 - The AI policies are intentionally imperfect; at neutral balance they clear
-  ~13–26 rooms and die by attrition. The tuning loop therefore eases enemies
-  each batch — an expected calibration outcome, not an engine fault.
+  ~13-26 rooms and die by attrition. The tuning loop therefore eases enemies
+  each batch: an expected calibration outcome, not an engine fault.
 - Mechanic validation passed end-to-end: a full 100-room run including all
   bosses and the room-100 ultra boss completes without crashes or desync
   (~16 sim-minutes).

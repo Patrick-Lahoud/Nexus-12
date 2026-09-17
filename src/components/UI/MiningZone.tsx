@@ -228,7 +228,7 @@ export default function MiningZone({ engine, onUpdate, isSandbox }: MiningZonePr
           </div>
           <div>
             <h2 className="text-xs font-black uppercase text-emerald-400 tracking-wider">{t('mining_ground_title', {}, 'Automated Mining Operations')}</h2>
-            <p className="text-[10px] text-zinc-400 font-sans">{t('late_game_economy_desc', {}, 'Extract valuable ore for passive credit income')}</p>
+            <p className="text-[10px] text-zinc-400">{t('late_game_economy_desc', {}, 'Extract valuable ore for passive credit income')}</p>
           </div>
         </div>
 
@@ -243,7 +243,7 @@ export default function MiningZone({ engine, onUpdate, isSandbox }: MiningZonePr
             <Info className="w-4 h-4 text-zinc-500 hover:text-emerald-400 cursor-help transition-colors" />
             <div className="absolute right-0 top-full mt-2 w-64 bg-zinc-950 border border-zinc-800 p-3 rounded-xl shadow-2xl text-xs text-zinc-400 leading-normal hidden group-hover/info:block z-[9999] pointer-events-none normal-case">
               <span className="text-emerald-400 font-bold uppercase block text-[10px] tracking-wider mb-1">{t('automated_mineral_harvest_hover', {}, 'AUTOMATED MINERAL HARVEST')}</span>
-              {t('automated_mineral_harvest_hover_desc', {}, 'Extracts rich resources straight to your credits balance every 2.0s! Mines are vulnerable and draw enemy fire—defend them!')}
+              {t('automated_mineral_harvest_hover_desc', {}, 'Extracts rich resources straight to your credits balance every 2.0s! Mines are vulnerable and draw enemy fire. Defend them!')}
             </div>
           </div>
         </div>
@@ -261,7 +261,7 @@ export default function MiningZone({ engine, onUpdate, isSandbox }: MiningZonePr
               RECOMMENDED ROUND 20+
             </span>
             <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">{t('mining_ground_title', {}, 'MINING ZONE')}</h3>
-            <p className="text-xs text-zinc-400 mt-2 leading-relaxed font-sans max-w-sm">
+            <p className="text-xs text-zinc-400 mt-2 leading-relaxed max-w-sm">
               {t('automated_mineral_harvest_hover_desc', {}, 'Deploy automated subterranean drills that continuously extract minerals and generate passive Credits every second!')}
             </p>
 
@@ -274,7 +274,7 @@ export default function MiningZone({ engine, onUpdate, isSandbox }: MiningZonePr
                 onClick={handleUnlock}
                 className={`w-full py-2.5 rounded-xl text-xs font-black font-mono transition-all uppercase cursor-pointer flex items-center justify-center gap-1.5 ${
                   currency >= 50000 || isSandbox || engine.gameMode.includes('SANDBOX')
-                    ? 'bg-emerald-400 hover:bg-emerald-300 text-black shadow-[0_0_20px_rgba(16,185,129,0.4)] animate-pulse'
+                    ? 'bg-emerald-400 hover:bg-emerald-300 text-black shadow-[0_0_20px_rgba(16,185,129,0.4)]'
                     : 'bg-zinc-800 border border-zinc-700 text-zinc-500 cursor-not-allowed'
                 }`}
               >
@@ -348,7 +348,7 @@ export default function MiningZone({ engine, onUpdate, isSandbox }: MiningZonePr
                         </div>
                         <span className="text-xs font-black uppercase text-white font-mono">{t(mine.id + '_name', {}, mine.name)}</span>
                       </div>
-                      <p className="text-[11px] text-zinc-400 leading-relaxed font-sans mt-1">{t(mine.id + '_description', {}, mine.description)}</p>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed mt-1">{t(mine.id + '_description', {}, mine.description)}</p>
                     </div>
 
                     <div className="flex gap-2 font-mono text-xs font-bold justify-between bg-black/60 p-2.5 rounded-xl border border-zinc-800/80 items-center">

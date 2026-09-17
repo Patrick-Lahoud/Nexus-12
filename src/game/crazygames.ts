@@ -325,7 +325,6 @@ class CrazyGamesService {
       'game_unlocked_achievements',
       'highest_room',
       'game_equipped_skin',
-      'game_equipped_aura',
       'consecutive_no_damage_campaign',
       'surv_turret_killed_15_in_5s'
     ];

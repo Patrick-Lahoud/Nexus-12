@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BookOpen, Settings, HelpCircle, LogOut, ShoppingCart, Shield, Heart, Activity, Lock, Unlock, Zap, Flame, Target, ChevronLeft, ChevronRight, Coins, Wrench, Pickaxe, BarChart2 } from 'lucide-react';
+import { BookOpen, Settings, HelpCircle, LogOut, ShoppingCart, Shield, Coins, Wrench, Pickaxe, Zap } from 'lucide-react';
 import { GameEngine } from '../../game/engine.ts';
 import { gameAudio } from '../../game/audio.ts';
 import { useLanguage, translateDynamicName } from '../../game/localization.ts';
@@ -28,8 +28,16 @@ export default function HUD({ engine, room, score, highestRoom = 1, onShowShop, 
   const prevHpPctRef = useRef<number | null>(null);
   const regenFlashStartRef = useRef<number>(0);
 
-  const canAffordTurrets = !engine.player.stats.isTurretsUnlocked && (engine.player.stats.currency >= 10000 || isSandbox);
-  const canAffordMines = !engine.player.stats.isMinesUnlocked && (engine.player.stats.currency >= 50000 || isSandbox);
+  // Unlock popup: level-based, matching the shop's boss-milestone gates
+  // (SKILLS 20 / DEFENSE 30 / MINING 40). Fires for a few rooms AFTER the feature
+  // actually unlocks at its milestone room, so "READY!" is always true when shown.
+  const skillsUnlocked = Boolean(engine.player.stats.isControlUnlocked || (engine.player.stats.ownedControls && engine.player.stats.ownedControls.length > 0)) || Boolean(isSandbox);
+  const turretsUnlocked = Boolean(engine.player.stats.isTurretsUnlocked) || Boolean(isSandbox);
+  const minesUnlocked = Boolean(engine.player.stats.isMinesUnlocked) || Boolean(isSandbox);
+  const nextMilestone = !isSandbox && skillsUnlocked && room >= 20 && room < 25 ? 'SKILLS'
+    : !isSandbox && turretsUnlocked && room >= 30 && room < 35 ? 'DEFENSE'
+    : !isSandbox && minesUnlocked && room >= 40 && room < 45 ? 'MINING'
+    : null;
   const hpPercent = engine.player.maxHp > 0 ? (engine.player.hp / engine.player.maxHp) * 100 : 0;
   const displayHpPct = Math.max(0, Math.ceil(hpPercent));
   if (prevHpPctRef.current !== null && displayHpPct > prevHpPctRef.current) {
@@ -89,7 +97,12 @@ export default function HUD({ engine, room, score, highestRoom = 1, onShowShop, 
 
           {/* Quit Button */}
           <button 
-            onClick={() => { gameAudio.playButtonClickSound(); setConfirmQuit(true); }}
+            onClick={() => {
+              gameAudio.playButtonClickSound();
+              setConfirmQuit(true);
+              // Pause the simulation while the quit confirmation is open
+              window.dispatchEvent(new CustomEvent('game_pause_request', { detail: { paused: true } }));
+            }}
             className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 hover:border-red-500 px-3.5 py-2 hover:bg-red-950/30 text-zinc-300 hover:text-red-400 font-bold transition-all rounded-lg cursor-pointer group"
           >
             <LogOut size={16} className="text-red-400" />
@@ -105,13 +118,14 @@ export default function HUD({ engine, room, score, highestRoom = 1, onShowShop, 
                   exit={{ scale: 0.95, opacity: 0 }}
                   transition={{ duration: 0.15, ease: "easeOut" }}
                   className="bg-zinc-950 border border-red-900/50 p-6 rounded-2xl max-w-sm w-full mx-4 shadow-[0_0_50px_rgba(239,68,68,0.25)] flex flex-col gap-4 text-center pointer-events-auto"
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <div className="mx-auto w-12 h-12 rounded-full bg-red-950/60 border border-red-500/40 flex items-center justify-center text-red-400 font-black text-xl shadow-[0_0_20px_rgba(239,68,68,0.3)]">
                     !
                   </div>
                   <div>
                     <h3 className="text-white font-black uppercase text-base tracking-wider font-mono">{t('quit_confirm_title')}</h3>
-                    <p className="text-zinc-300 text-xs mt-2 leading-relaxed font-mono">
+                    <p className="text-zinc-400 text-xs mt-2 leading-relaxed font-mono">
                       {t('quit_confirm_desc')}
                     </p>
                   </div>
@@ -127,7 +141,12 @@ export default function HUD({ engine, room, score, highestRoom = 1, onShowShop, 
                       {t('yes_quit')}
                     </button>
                     <button 
-                      onClick={() => { gameAudio.playButtonClickSound(); setConfirmQuit(false); }}
+                      onClick={() => {
+                        gameAudio.playButtonClickSound();
+                        setConfirmQuit(false);
+                        // Resume the simulation when the modal closes without quitting
+                        window.dispatchEvent(new CustomEvent('game_pause_request', { detail: { paused: false } }));
+                      }}
                       className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-lg transition-all border border-zinc-700 cursor-pointer"
                     >
                       {t('cancel')}
@@ -138,10 +157,6 @@ export default function HUD({ engine, room, score, highestRoom = 1, onShowShop, 
             )}
           </AnimatePresence>
           
-          <span className={`text-xs uppercase tracking-widest font-black font-mono ml-1 ${gameMode === 'HARDCORE' ? 'text-red-400' : 'text-zinc-400'}`}>
-            {gameMode === 'HARDCORE' ? t('hardcore', {}, 'HARDCORE') : (gameMode === 'SANDBOX' || gameMode === 'OVERDRIVE_SANDBOX') ? t('sandbox_simulation', {}, 'Sandbox') : gameMode === 'SURVIVAL' ? t('retro_sector', {}, 'Retro Sector') : t('survival_sector', {}, 'Survival')}
-          </span>
-
           {isSandbox && (
             <div className="flex items-center gap-2 bg-zinc-950/80 border border-zinc-800 px-3 py-1 rounded-lg ml-2 group hover:border-cyan-500/50 transition-colors">
               <span className="text-xs font-black text-zinc-400 uppercase font-mono">{t('input_sector')}</span>
@@ -213,7 +228,7 @@ export default function HUD({ engine, room, score, highestRoom = 1, onShowShop, 
               <span className="text-sm sm:text-base font-black uppercase text-amber-950 leading-none tracking-wider font-mono">
                 {t('shop', {}, 'SHOP')}
               </span>
-              <span className="text-[10px] font-extrabold uppercase text-amber-900/80 leading-tight mt-0.5 tracking-tight font-sans">
+              <span className="text-[10px] font-extrabold uppercase text-amber-900/80 leading-tight mt-0.5 tracking-tight">
                 {t('core_upgrades', {}, 'UPGRADES & DEPLOYMENTS')}
               </span>
             </div>
@@ -230,30 +245,19 @@ export default function HUD({ engine, room, score, highestRoom = 1, onShowShop, 
              )}
           </div>
 
-          {(canAffordTurrets || canAffordMines) ? (
+          {nextMilestone ? (
             <div className="absolute bottom-[calc(100%+6px)] right-1 z-20 flex flex-col items-end gap-1 pointer-events-none">
-              {canAffordMines && (
-                <motion.div 
-                  initial={{ scale: 0 }}
-                  animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ repeat: Infinity, duration: 1.2 }}
-                  className="px-2 py-0.5 rounded-full border-2 border-zinc-950 font-mono text-[9px] font-black uppercase shadow-lg flex items-center gap-1 bg-emerald-400 text-black shadow-emerald-400/80"
-                >
-                  <Pickaxe size={10} />
-                  <span>MINING READY!</span>
-                </motion.div>
-              )}
-              {canAffordTurrets && (
-                <motion.div 
-                  initial={{ scale: 0 }}
-                  animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ repeat: Infinity, duration: 1.2 }}
-                  className="px-2 py-0.5 rounded-full border-2 border-zinc-950 font-mono text-[9px] font-black uppercase shadow-lg flex items-center gap-1 bg-amber-400 text-black shadow-amber-400/80"
-                >
-                  <Wrench size={10} />
-                  <span>DEFENSE READY!</span>
-                </motion.div>
-              )}
+              <motion.div 
+                initial={{ scale: 0 }}
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ repeat: Infinity, duration: 1.2 }}
+                className={`px-2 py-0.5 rounded-full border-2 border-zinc-950 font-mono text-[9px] font-black uppercase shadow-lg flex items-center gap-1 ${nextMilestone === 'MINING' ? 'bg-emerald-400 text-black shadow-emerald-400/80' : 'bg-amber-400 text-black shadow-amber-400/80'}`}
+              >
+                {nextMilestone === 'SKILLS' && <Zap size={10} />}
+                {nextMilestone === 'DEFENSE' && <Wrench size={10} />}
+                {nextMilestone === 'MINING' && <Pickaxe size={10} />}
+                <span>{nextMilestone} READY!</span>
+              </motion.div>
             </div>
           ) : (!isSandbox && engine.player.stats.currency >= 40) ? (
             <motion.div 
@@ -265,26 +269,20 @@ export default function HUD({ engine, room, score, highestRoom = 1, onShowShop, 
           ) : null}
         </motion.button>
 
-        {/* Rebuilds Indicator — green, shop-sized, sits between the Shop button and the health readout */}
+        {/* Rebuilds Readout: plain label + indicator, matching the hull/hostiles style (no button chrome) */}
         {gameMode === 'OVERDRIVE' && typeof rebuildsLeft === 'number' && rebuildsLeft > 0 && (
-          <div className="flex flex-col items-center justify-center gap-1.5 bg-emerald-950/60 border-2 border-emerald-500/50 rounded-2xl px-5 py-2.5 min-w-[170px] shadow-[0_0_15px_rgba(16,185,129,0.2)]">
-            <span className="text-xs font-black uppercase tracking-wider text-emerald-300 leading-none text-center">
-              {t('rebuilds_short', {}, 'Rebuilds')}
-            </span>
-            <div className="flex items-center gap-1.5">
+          <div className="flex flex-col items-end">
+            <p className="text-xs uppercase text-zinc-400 font-bold font-mono tracking-wider mb-1">{t('rebuilds_short', {}, 'Rebuilds')}</p>
+            <div className="flex items-center gap-1.5 h-8">
               {[0, 1, 2].map(i => {
                 const lit = i < rebuildsLeft;
                 return (
-                  <span
+                  <Wrench
                     key={i}
-                    className={`w-6 h-6 rounded-md border flex items-center justify-center transition-all duration-300 ${
-                      lit
-                        ? 'bg-emerald-400 text-emerald-950 border-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
-                        : 'bg-zinc-900/80 border-zinc-700 text-zinc-600'
-                    }`}
-                  >
-                    <Wrench size={14} strokeWidth={2.5} />
-                  </span>
+                    size={22}
+                    strokeWidth={2.5}
+                    className={lit ? 'text-emerald-400 transition-all duration-300' : 'text-zinc-700 transition-all duration-300'}
+                  />
                 );
               })}
             </div>
@@ -349,114 +347,9 @@ export default function HUD({ engine, room, score, highestRoom = 1, onShowShop, 
   );
 }
 
-export function SidebarStats({ engine, room = 1, onOpenControlShop }: { engine: GameEngine; room?: number; onOpenControlShop?: () => void }) {
+export function SidebarStats({ engine, room = 1 }: { engine: GameEngine; room?: number }) {
     const { t, lang } = useLanguage();
     const abilityCount = engine.player.abilities.length;
-    const isSkillsUnlocked = Boolean(engine.player.stats.isControlUnlocked || (engine.player.stats.ownedControls && engine.player.stats.ownedControls.length > 0) || engine.gameMode?.includes('SANDBOX'));
-    const isSandbox = engine.gameMode?.includes('SANDBOX');
-    const currency = engine.player.stats.currency || 0;
-
-    const handleBuySkillsFromHUD = () => {
-        const cost = 2500;
-        if (currency >= cost || isSandbox) {
-            if (!isSandbox) {
-                engine.player.stats.currency = Math.max(0, currency - cost);
-            }
-            engine.player.stats.isControlUnlocked = true;
-            if (!engine.player.stats.ownedControls) {
-                engine.player.stats.ownedControls = [];
-            }
-            if (!engine.player.stats.ownedControls.some(c => c.id === 'redirection_pull')) {
-                engine.player.stats.ownedControls.push({ id: 'redirection_pull', level: 1 });
-            }
-            if (!engine.player.stats.leftClickSlot) {
-                engine.player.stats.leftClickSlot = 'redirection_pull';
-            }
-            gameAudio.playUpgradePickSound();
-        } else {
-            gameAudio.playHitSound(false, 'laser');
-            onOpenControlShop?.();
-        }
-    };
-    
-    const [highlights, setHighlights] = useState<Record<string, boolean>>({});
-    const prevStatsRef = useRef<Record<string, number>>({});
-
-    const currentStatsSnapshot: Record<string, number> = {
-        speed: engine.player.stats.speed || 0,
-        bounceDmg: engine.player.stats.bounceDmg || 0,
-        critChance: engine.player.stats.critChance || 0,
-        regen: engine.player.stats.regen || 0,
-        lifesteal: engine.player.stats.lifesteal || 0,
-        accuracy: engine.player.stats.accuracy || 0,
-        defense: engine.player.stats.defense || 0,
-        maxHp: engine.player.maxHp || 0,
-        damageMult: engine.player.stats.damageMult || 0,
-        meleeSpeed: engine.player.stats.meleeSpeed || 0,
-        cooldownMult: engine.player.stats.cooldownMult ?? 1.0,
-        pierce: (engine.player.stats as any).pierce || 0,
-        weaponSize: engine.player.stats.weaponSize || 0,
-        weaponSynergy: engine.player.stats.weaponSynergy || 0,
-        projectileSlow: engine.player.stats.projectileSlow || 0,
-        slowDmgBoost: engine.player.stats.slowDmgBoost || 0,
-        fireDmgBoost: engine.player.stats.fireDmgBoost || 0,
-        fireMeleeDmgBoost: engine.player.stats.fireMeleeDmgBoost || 0,
-    };
-
-    useEffect(() => {
-        const prev = prevStatsRef.current;
-        const newlyHighlighted: string[] = [];
-
-        if (Object.keys(prev).length > 0) {
-            for (const [k, v] of Object.entries(currentStatsSnapshot)) {
-                const prevVal = prev[k];
-                if (prevVal !== undefined) {
-                    if (k === 'cooldownMult' ? v < prevVal - 0.005 : v > prevVal + 0.005) {
-                        newlyHighlighted.push(k);
-                    }
-                }
-            }
-        }
-
-        prevStatsRef.current = { ...currentStatsSnapshot };
-
-        if (newlyHighlighted.length > 0) {
-            setHighlights(h => {
-                const next = { ...h };
-                newlyHighlighted.forEach(k => { next[k] = true; });
-                return next;
-            });
-
-            const timer = setTimeout(() => {
-                setHighlights(h => {
-                    const next = { ...h };
-                    newlyHighlighted.forEach(k => { delete next[k]; });
-                    return next;
-                });
-            }, 1200);
-
-            return () => clearTimeout(timer);
-        }
-    }, [
-        engine.player.stats.speed,
-        engine.player.stats.bounceDmg,
-        engine.player.stats.critChance,
-        engine.player.stats.regen,
-        engine.player.stats.lifesteal,
-        engine.player.stats.accuracy,
-        engine.player.stats.defense,
-        engine.player.maxHp,
-        engine.player.stats.damageMult,
-        engine.player.stats.meleeSpeed,
-        engine.player.stats.cooldownMult,
-        (engine.player.stats as any).pierce,
-        engine.player.stats.weaponSize,
-        engine.player.stats.weaponSynergy,
-        engine.player.stats.projectileSlow,
-        engine.player.stats.slowDmgBoost,
-        engine.player.stats.fireDmgBoost,
-        engine.player.stats.fireMeleeDmgBoost
-    ]);
 
     const displayKey = (key?: string) => {
         if (!key) return '?';
@@ -464,471 +357,85 @@ export function SidebarStats({ engine, room = 1, onOpenControlShop }: { engine: 
         return key.replace('Key', '');
     };
 
-    const reductionCount = engine.player.stats.deflectCooldownReduction || 0;
-    const maxCooldown = Math.max(0.5, 5.0 - reductionCount * 0.1);
-
-    const statsList = [
-        // Primary Survivability & Defense
-        {
-            key: 'maxHp',
-            val: engine.player.maxHp || 0,
-            label: t('hull_integrity', {}, 'Hull Integrity'),
-            value: Math.round(engine.player.maxHp || 0).toString(),
-            progress: Math.min(1, Math.max(0, (engine.player.maxHp || 0) / 2000)),
-            textClass: "text-red-300",
-            progressClass: "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]"
-        },
-        {
-            key: 'defense',
-            val: engine.player.stats.defense || 0,
-            label: t('stat_defense', {}, 'Ship Shield'),
-            value: `${Math.round((engine.player.stats.defense || 0) * 100)}%`,
-            progress: Math.min(1, Math.max(0, (engine.player.stats.defense || 0) / 2)),
-            textClass: "text-sky-300",
-            progressClass: "bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]"
-        },
-        {
-            key: 'regen',
-            val: engine.player.stats.regen || 0,
-            label: t('stat_regen'),
-            value: (engine.player.stats.regen || 0).toFixed(1),
-            progress: Math.min(1, Math.max(0, (engine.player.stats.regen || 0) / 10)),
-            textClass: "text-lime-300",
-            progressClass: "bg-lime-400 shadow-[0_0_8px_rgba(163,230,53,0.8)]"
-        },
-        {
-            key: 'lifesteal',
-            val: engine.player.stats.lifesteal || 0,
-            label: t('stat_lifesteal'),
-            value: `${Math.round((engine.player.stats.lifesteal || 0) * 100)}%`,
-            progress: Math.min(1, Math.max(0, (engine.player.stats.lifesteal || 0) / 0.25)),
-            textClass: "text-rose-300",
-            progressClass: "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]"
-        },
-
-        // Core Mobility & Offensive Power
-        {
-            key: 'speed',
-            val: engine.player.stats.speed || 0,
-            label: t('stat_velocity'),
-            value: `${Math.round((engine.player.stats.speed || 0) * 100)}%`,
-            progress: Math.min(1, Math.max(0, (engine.player.stats.speed || 0) / 3)),
-            textClass: "text-cyan-300",
-            progressClass: "bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"
-        },
-        {
-            key: 'cooldownMult',
-            val: engine.player.stats.cooldownMult ? (1 / engine.player.stats.cooldownMult) : 1.0,
-            label: t('stat_cooldown', {}, 'Fire Rate'),
-            value: `${Math.round((1 / (engine.player.stats.cooldownMult || 1.0)) * 100)}%`,
-            progress: Math.min(1, Math.max(0, ((1 / (engine.player.stats.cooldownMult || 1.0)) - 1.0) / 2.0)),
-            textClass: "text-purple-300",
-            progressClass: "bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.8)]"
-        },
-        {
-            key: 'critChance',
-            val: engine.player.stats.critChance || 0,
-            label: t('stat_critical'),
-            value: `${Math.round((engine.player.stats.critChance || 0) * 100)}%`,
-            progress: Math.min(1, Math.max(0, (engine.player.stats.critChance || 0) / 0.50)),
-            textClass: "text-yellow-300",
-            progressClass: "bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.8)]"
-        },
-        {
-            key: 'damageMult',
-            val: engine.player.stats.damageMult || 0,
-            label: t('crit_bonus', {}, 'Critical Bonus'),
-            value: `${Math.round((engine.player.stats.damageMult || 0) * 100)}%`,
-            progress: Math.min(1, Math.max(0, (engine.player.stats.damageMult || 0) / 2.5)),
-            textClass: "text-orange-300",
-            progressClass: "bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.8)]"
-        },
-        {
-            key: 'pierce',
-            val: (engine.player.stats as any).pierce || 0,
-            label: t('pierce_cnt', {}, 'Pierce Count'),
-            value: `+${Math.round((engine.player.stats as any).pierce || 0)}`,
-            progress: Math.min(1, Math.max(0, ((engine.player.stats as any).pierce || 0) / 5)),
-            textClass: "text-emerald-300",
-            progressClass: "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"
-        },
-        {
-            key: 'bounceDmg',
-            val: engine.player.stats.bounceDmg || 0,
-            label: t('stat_impact'),
-            value: Math.round(engine.player.stats.bounceDmg || 0).toString(),
-            progress: Math.min(1, Math.max(0, (engine.player.stats.bounceDmg || 0) / 100)),
-            textClass: "text-amber-300",
-            progressClass: "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]"
-        },
-
-        // Precision, Reach & Synergies
-        {
-            key: 'accuracy',
-            val: engine.player.stats.accuracy || 0,
-            label: t('stat_accuracy', {}, 'Accuracy'),
-            value: `${Math.round((engine.player.stats.accuracy || 0) * 100)}%`,
-            progress: Math.min(1, Math.max(0, (engine.player.stats.accuracy || 0) / 1.0)),
-            textClass: "text-purple-300",
-            progressClass: "bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.8)]"
-        },
-        {
-            key: 'weaponSize',
-            val: engine.player.stats.weaponSize || 0,
-            label: t('stat_weapon_size', {}, 'Weapon Size'),
-            value: `${Math.round((engine.player.stats.weaponSize || 1.0) * 100)}%`,
-            progress: Math.min(1, Math.max(0, ((engine.player.stats.weaponSize || 1.0) - 1.0) / 1.5)),
-            textClass: "text-teal-300",
-            progressClass: "bg-teal-400 shadow-[0_0_8px_rgba(45,212,191,0.8)]"
-        },
-        {
-            key: 'meleeSpeed',
-            val: engine.player.stats.meleeSpeed || 0,
-            label: t('melee_speed', {}, 'Melee Speed'),
-            value: `${Math.round((engine.player.stats.meleeSpeed || 0) * 100)}%`,
-            progress: Math.min(1, Math.max(0, (engine.player.stats.meleeSpeed || 0) / 2.5)),
-            textClass: "text-violet-300",
-            progressClass: "bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.8)]"
-        },
-        {
-            key: 'weaponSynergy',
-            val: engine.player.stats.weaponSynergy || 0,
-            label: t('stat_weapon_synergy', {}, 'System Synergy'),
-            value: `+${Math.round((engine.player.stats.weaponSynergy || 0) * 100)}%`,
-            progress: Math.min(1, Math.max(0, (engine.player.stats.weaponSynergy || 0) / 1.0)),
-            textClass: "text-blue-300",
-            progressClass: "bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)]"
-        },
-        {
-            key: 'projectileSlow',
-            val: engine.player.stats.projectileSlow || 0,
-            label: t('stat_projectile_slow', {}, 'Enemy Slow'),
-            value: `${Math.round((engine.player.stats.projectileSlow || 0) * 100)}%`,
-            progress: Math.min(1, Math.max(0, (engine.player.stats.projectileSlow || 0) / 0.50)),
-            textClass: "text-cyan-300",
-            progressClass: "bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"
-        },
-        {
-            key: 'fireDmgBoost',
-            val: engine.player.stats.fireDmgBoost || 0,
-            label: t('stat_fire_dmg_boost', {}, 'Fire Damage +'),
-            value: `+${Math.round((engine.player.stats.fireDmgBoost || 0) * 100)}%`,
-            progress: Math.min(1, Math.max(0, (engine.player.stats.fireDmgBoost || 0) / 1.0)),
-            textClass: "text-rose-300",
-            progressClass: "bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.8)]"
-        },
-        {
-            key: 'slowDmgBoost',
-            val: engine.player.stats.slowDmgBoost || 0,
-            label: t('stat_slow_dmg_boost', {}, 'Slow Damage +'),
-            value: `+${Math.round((engine.player.stats.slowDmgBoost || 0) * 100)}%`,
-            progress: Math.min(1, Math.max(0, (engine.player.stats.slowDmgBoost || 0) / 1.0)),
-            textClass: "text-sky-300",
-            progressClass: "bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]"
-        },
-        {
-            key: 'fireMeleeDmgBoost',
-            val: engine.player.stats.fireMeleeDmgBoost || 0,
-            label: t('stat_fire_melee_dmg_boost', {}, 'Fire Melee +'),
-            value: `+${Math.round((engine.player.stats.fireMeleeDmgBoost || 0) * 100)}%`,
-            progress: Math.min(1, Math.max(0, (engine.player.stats.fireMeleeDmgBoost || 0) / 1.0)),
-            textClass: "text-amber-300",
-            progressClass: "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]"
-        },
-        {
-            key: 'upgradeChoicesCount',
-            val: (engine.player.stats.upgradeChoicesCount || 3) > 3 ? (engine.player.stats.upgradeChoicesCount || 3) : 0,
-            label: t('stat_upgrade_choices', {}, 'Upgrade Choices'),
-            value: `${engine.player.stats.upgradeChoicesCount || 3} Slots`,
-            progress: Math.min(1, Math.max(0, ((engine.player.stats.upgradeChoicesCount || 3) - 3) / 3)),
-            textClass: "text-amber-300",
-            progressClass: "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]"
-        }
-    ];
-
     return (
-        <div id="sidebar-stats" className="w-[410px] grid grid-cols-2 gap-3.5 h-full select-none">
-            {/* Column 1: Active Abilities & Control Tab */}
-            <div className="flex flex-col gap-3.5">
-                
-                {/* Active Abilities Section */}
-                <div className="bg-zinc-950/70 p-4 border border-zinc-800/80 rounded-2xl backdrop-blur-md flex flex-col flex-1 overflow-hidden min-h-[210px] shadow-lg">
-                    <div className="flex justify-between items-center mb-3 pb-2 border-b border-zinc-800">
-                        <h3 className="text-xs font-black uppercase text-amber-400 tracking-wider font-mono flex items-center gap-1.5">
-                            <Zap size={14} />
-                            {t('active_abilities', {}, 'ABILITIES')}
-                        </h3>
-                        <span className={`text-xs font-black font-mono px-2 py-0.5 rounded-md ${abilityCount >= 5 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}`}>
-                            {abilityCount}/5 {t('slots', {}, 'SLOTS')}
-                        </span>
-                    </div>
-                    
-                    <div className="flex-1 overflow-y-auto scrollbar-thin pr-1 space-y-3">
-                        {engine.player.abilities.length === 0 && <p className="text-zinc-500 text-xs italic font-mono pt-2">{t('no_active_abilities')}</p>}
-                        {engine.player.abilities.map((a, i) => {
-                            const now = Date.now();
-                            const timeSinceUsed = now - a.lastUsed;
-                            const cooldownPercent = Math.min(1, timeSinceUsed / a.cooldown);
-                            const isReady = cooldownPercent >= 1;
-
-                            return (
-                                <div key={i} className="flex flex-col relative group bg-black/40 p-2 rounded-xl border border-zinc-800">
-                                    <div className="flex justify-between items-center mb-1.5">
-                                        <div className="flex flex-col">
-                                            {(() => {
-                                                const up = [...ALL_UPGRADES, ...EVOLVED_ABILITIES].find(u => u.abilityType === a.type);
-                                                const displayName = up ? t('up_name_' + up.id, {}, up.name) : translateDynamicName(a.name, lang);
-                                                return (
-                                                    <span className={`text-xs font-black uppercase tracking-tight ${isReady ? 'text-amber-300' : 'text-zinc-400'}`}>
-                                                        {displayName}
-                                                    </span>
-                                                );
-                                            })()}
-                                            <span className="text-[10px] text-zinc-500 font-mono font-bold">
-                                                {a.level >= getAbilityMaxLevel(a.type) ? `LVL ${a.level} (MAX)` : `LVL ${a.level || 1}`}
-                                            </span>
-                                        </div>
-                                        <div className={`w-7 h-7 flex items-center justify-center border ${isReady ? 'border-amber-400 bg-amber-400/20 text-amber-300' : 'border-zinc-700 bg-zinc-800 text-zinc-500'} transition-all duration-300 rounded-lg shadow-sm font-mono text-xs font-black`}>
-                                            {displayKey(a.key)}
-                                        </div>
-                                    </div>
-                                    <div className="h-1.5 bg-zinc-800 w-full overflow-hidden rounded-full">
-                                        <motion.div 
-                                            initial={false}
-                                            animate={{ width: `${cooldownPercent * 100}%` }}
-                                            className={`h-full transition-all ${isReady ? 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]' : 'bg-zinc-600'}`}
-                                        />
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+        <div id="sidebar-stats" className="w-[205px] flex flex-col gap-3.5 h-full select-none">
+            {/* Active Abilities Section */}
+            <div className="bg-zinc-950/70 p-4 border border-zinc-800/80 rounded-2xl backdrop-blur-md flex flex-col flex-1 overflow-hidden min-h-[210px] shadow-lg">
+                <div className="flex justify-between items-center mb-3 pb-2 border-b border-zinc-800">
+                    <h3 className="text-xs font-black uppercase text-amber-400 tracking-wider font-mono flex items-center gap-1.5">
+                        <Zap size={14} />
+                        {t('active_abilities', {}, 'ABILITIES')}
+                    </h3>
+                    <span className={`text-xs font-black font-mono px-2 py-0.5 rounded-md ${abilityCount >= 5 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}`}>
+                        {abilityCount}/5 {t('slots', {}, 'SLOTS')}
+                    </span>
                 </div>
 
-                {/* Control Tab Section */}
-                <div className="bg-zinc-950/70 p-4 border border-zinc-800/80 rounded-2xl backdrop-blur-md flex flex-col justify-between overflow-hidden h-[230px] shadow-lg">
-                    <div className="flex justify-between items-center mb-3 pb-2 border-b border-zinc-800">
-                        <h3 className="text-xs font-black uppercase text-cyan-400 tracking-wider font-mono flex items-center gap-1.5">
-                            <Activity size={14} />
-                            {t('control_tab', {}, 'SKILLS')}
-                        </h3>
-                        {isSkillsUnlocked && (
-                            <span className="text-xs font-black font-mono px-2 py-0.5 rounded-md uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                                {t('active', {}, 'ACTIVE')}
-                            </span>
-                        )}
-                    </div>
+                <div className="flex-1 overflow-y-auto scrollbar-thin pr-1 space-y-3">
+                    {engine.player.abilities.length === 0 && <p className="text-zinc-500 text-xs italic font-mono pt-2">{t('no_active_abilities')}</p>}
+                    {engine.player.abilities.map((a, i) => {
+                        const now = Date.now();
+                        const timeSinceUsed = now - a.lastUsed;
+                        const cooldownPercent = Math.min(1, timeSinceUsed / a.cooldown);
+                        const isReady = cooldownPercent >= 1;
+                        const isMaxed = a.level >= getAbilityMaxLevel(a.type);
 
-                    {!isSkillsUnlocked ? (
-                        <div className="flex-1 flex flex-col items-center justify-between p-3 text-center bg-black/40 border border-zinc-800 rounded-xl">
-                            <div className="flex flex-col items-center my-auto">
-                                <span className="text-xs font-black text-cyan-400 uppercase tracking-wider block mb-1 font-mono">{t('no_skills_equipped', {}, 'Tactical Skills')}</span>
-                                <p className="text-[10px] text-zinc-400 leading-tight max-w-[210px] font-sans">
-                                    {t('skills_available_desc', {}, 'Unlock tactical mouse abilities anytime.')}
-                                </p>
-                            </div>
-                            <button
-                                onClick={handleBuySkillsFromHUD}
-                                className={`w-full py-2 rounded-lg font-mono text-xs uppercase font-black tracking-wider transition-all cursor-pointer shadow-sm flex items-center justify-center gap-1.5 ${
-                                    currency >= 2500 || isSandbox
-                                        ? 'bg-cyan-400 hover:bg-cyan-300 text-black shadow-[0_0_15px_rgba(34,211,238,0.4)] animate-pulse'
-                                        : 'bg-zinc-800 border border-zinc-700 text-zinc-400 hover:border-cyan-500/50 hover:text-cyan-300'
-                                }`}
-                            >
-                                <span>{isSandbox ? 'BUY (FREE)' : 'BUY (2,500 Cr)'}</span>
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="flex-1 flex flex-col justify-between">
-                            <div className="space-y-1.5">
-                                <p className="text-[10px] text-zinc-400 font-mono tracking-wider uppercase font-bold">
-                                    {t('equipped_tacticals')}
-                                </p>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {/* Left Click Slot Details */}
-                                    <div className="bg-black/60 border border-zinc-800 p-2.5 rounded-xl flex flex-col justify-between h-[82px] relative">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <span className="text-[10px] font-black text-cyan-400 font-mono uppercase tracking-wider">{t('left_click')}</span>
-                                            {engine.player.stats.leftClickSlot && (engine.player.stats.controlCooldowns?.[engine.player.stats.leftClickSlot] || 0) > 0 && (
-                                                <span className="text-[9px] text-rose-400 font-mono font-black animate-pulse bg-rose-500/20 px-1 py-0.5 rounded border border-rose-500/30">{t('cd')}</span>
-                                            )}
-                                        </div>
-                                        {engine.player.stats.leftClickSlot ? (
-                                            (() => {
-                                                const id = engine.player.stats.leftClickSlot;
-                                                const matches: Record<string, string> = {
-                                                    redirection_pull: t('control_redirection_pull', {}, 'Pull'),
-                                                    gravity_tether: t('control_gravity_tether', {}, 'Tether'),
-                                                    gravity_warp: t('control_gravity_warp', {}, 'Teleport'),
-                                                    shockwave_blast: t('control_shockwave_blast', {}, 'Shockwave'),
-                                                    gravity_well: t('control_gravity_well', {}, 'Gravity Well'),
-                                                    temporal_freeze: t('control_temporal_freeze', {}, 'Stasis Freeze'),
-                                                    emp_pulse: t('control_emp_pulse', {}, 'EMP Pulse')
-                                                };
-                                                const level = engine.player.stats.ownedControls?.find(c => c.id === id)?.level || 1;
-                                                return (
-                                                    <div className="flex flex-col">
-                                                        <span className="text-xs font-black text-white font-mono truncate uppercase">
-                                                            {matches[id] || id}
-                                                        </span>
-                                                        <span className="text-[9px] text-zinc-400 font-mono font-bold uppercase">LVL {level}</span>
-                                                    </div>
-                                                );
-                                            })()
-                                        ) : (
-                                            <span className="text-xs text-zinc-600 italic font-mono uppercase">{t('empty_slot')}</span>
-                                        )}
+                        return (
+                            <div key={i} className={`flex flex-col relative group bg-black/40 p-2 rounded-xl border transition-all ${isMaxed ? 'border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.45)]' : 'border-zinc-800'}`}>
+                                <div className="flex justify-between items-center mb-1.5">
+                                    <div className="flex flex-col">
+                                        {(() => {
+                                            const up = [...ALL_UPGRADES, ...EVOLVED_ABILITIES].find(u => u.abilityType === a.type);
+                                            const displayName = up ? t('up_name_' + up.id, {}, up.name) : translateDynamicName(a.name, lang);
+                                            return (
+                                                <span className={`text-xs font-black uppercase tracking-tight ${isReady ? 'text-amber-300' : 'text-zinc-400'}`}>
+                                                    {displayName}
+                                                </span>
+                                            );
+                                        })()}
+                                        <span className={`text-[10px] font-mono font-bold ${isMaxed ? 'text-amber-400' : 'text-zinc-500'}`}>
+                                            {isMaxed ? `LVL ${a.level} MAX` : `LVL ${a.level || 1}`}
+                                        </span>
                                     </div>
-
-                                    {/* Right Click Slot Details */}
-                                    <div className="bg-black/60 border border-zinc-800 p-2.5 rounded-xl flex flex-col justify-between h-[82px] relative">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <span className="text-[10px] font-black text-cyan-400 font-mono uppercase tracking-wider">{t('right_click')}</span>
-                                            {engine.player.stats.rightClickSlot && (engine.player.stats.controlCooldowns?.[engine.player.stats.rightClickSlot] || 0) > 0 && (
-                                                <span className="text-[9px] text-rose-400 font-mono font-black animate-pulse bg-rose-500/20 px-1 py-0.5 rounded border border-rose-500/30">{t('cd')}</span>
-                                            )}
-                                        </div>
-                                        {engine.player.stats.rightClickSlot ? (
-                                            (() => {
-                                                const id = engine.player.stats.rightClickSlot;
-                                                const matches: Record<string, string> = {
-                                                    redirection_pull: t('control_redirection_pull', {}, 'Pull'),
-                                                    gravity_tether: t('control_gravity_tether', {}, 'Tether'),
-                                                    gravity_warp: t('control_gravity_warp', {}, 'Teleport'),
-                                                    shockwave_blast: t('control_shockwave_blast', {}, 'Shockwave'),
-                                                    gravity_well: t('control_gravity_well', {}, 'Gravity Well'),
-                                                    temporal_freeze: t('control_temporal_freeze', {}, 'Stasis Freeze'),
-                                                    emp_pulse: t('control_emp_pulse', {}, 'EMP Pulse')
-                                                };
-                                                const level = engine.player.stats.ownedControls?.find(c => c.id === id)?.level || 1;
-                                                return (
-                                                    <div className="flex flex-col">
-                                                        <span className="text-xs font-black text-white font-mono truncate uppercase">
-                                                            {matches[id] || id}
-                                                        </span>
-                                                        <span className="text-[9px] text-zinc-400 font-mono font-bold uppercase">LVL {level}</span>
-                                                    </div>
-                                                );
-                                            })()
-                                        ) : (
-                                            <span className="text-xs text-zinc-600 italic font-mono uppercase">{t('empty_slot')}</span>
-                                        )}
+                                    <div className={`w-7 h-7 flex items-center justify-center border ${isReady ? 'border-amber-400 bg-amber-400/20 text-amber-300' : 'border-zinc-700 bg-zinc-800 text-zinc-500'} transition-all duration-300 rounded-lg shadow-sm font-mono text-xs font-black`}>
+                                        {displayKey(a.key)}
                                     </div>
                                 </div>
-                            </div>
-
-                            <button
-                                onClick={onOpenControlShop}
-                                className="w-full py-1.5 mt-1 bg-zinc-800 border border-zinc-700 hover:border-cyan-400 hover:text-cyan-300 text-zinc-200 rounded-lg font-mono text-xs uppercase font-bold tracking-wider transition-all cursor-pointer"
-                            >
-                                {t('open_control_shop_p', {}, 'Open Skills Shop (P)')}
-                            </button>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Column 2: Current Loadout & Stat breakdown */}
-                <div className="flex flex-col gap-2.5 h-full">
-                    <div className="bg-zinc-950/70 p-2.5 px-3 border border-zinc-800/80 rounded-2xl backdrop-blur-md shadow-lg shrink-0">
-                        <div className="flex justify-between items-center mb-1.5 pb-1 border-b border-zinc-800">
-                            <h3 className="text-xs font-black uppercase text-emerald-400 tracking-wider font-mono flex items-center gap-1.5">
-                                <Shield size={13} />
-                                {t('current_loadout', {}, 'LOADOUT')}
-                            </h3>
-                            <span className="text-[10px] font-black font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                                {engine.player.weapons.length} {t('systems', {}, 'SYS')}
-                            </span>
-                        </div>
-                        <div className="space-y-1">
-                            {engine.player.weapons.length === 0 && <p className="text-zinc-500 text-[10px] italic font-mono">{t('no_systems_active')}</p>}
-                            {engine.player.weapons.map((w, i) => (
-                                <div key={i} className="flex justify-between items-center bg-black/40 px-2 py-0.5 rounded border border-zinc-800">
-                                    <span className="font-mono text-[10px] uppercase text-zinc-200 font-bold truncate max-w-[120px]">
-                                        {t('wp_' + w.type, {}, w.type.replace(/_/g, ' '))}
-                                    </span>
-                                    <span className="text-cyan-400 text-[10px] font-black font-mono">Lv.{w.level}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="bg-zinc-950/70 p-2.5 px-3 border border-zinc-800/80 rounded-2xl backdrop-blur-md shadow-lg flex flex-col max-h-[360px] overflow-hidden">
-                        <div className="flex justify-between items-center mb-1 pb-1 border-b border-zinc-800 shrink-0">
-                            <h3 className="text-xs font-black uppercase text-purple-400 tracking-wider font-mono flex items-center gap-1.5">
-                                <BarChart2 size={13} />
-                                {t('stat_breakdown', {}, 'STATS')}
-                            </h3>
-                            <span className="text-[10px] font-black font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                                {t('active', {}, 'ACTIVE')}
-                            </span>
-                        </div>
-                        <div className="flex flex-col gap-1 pt-0.5 overflow-y-auto pr-1 custom-scrollbar max-h-[290px]">
-                            {statsList
-                                .filter(s => s.val > 0.0001)
-                                .map(stat => (
-                                    <StatBar
-                                        key={stat.key}
-                                        label={stat.label}
-                                        value={stat.value}
-                                        progress={stat.progress}
-                                        textClass={stat.textClass}
-                                        progressClass={stat.progressClass}
-                                        isHighlighted={Boolean(highlights[stat.key])}
+                                <div className="h-1.5 bg-zinc-800 w-full overflow-hidden rounded-full">
+                                    <motion.div 
+                                        initial={false}
+                                        animate={{ width: `${cooldownPercent * 100}%` }}
+                                        className={`h-full transition-all ${isReady ? 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]' : 'bg-zinc-600'}`}
                                     />
-                                ))
-                            }
-                        </div>
-                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
-    );
-}
 
-function StatBar({ 
-    label, 
-    value, 
-    progress, 
-    textClass = "text-cyan-300", 
-    progressClass = "bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]",
-    isHighlighted = false
-}: { 
-    key?: string; 
-    label: string; 
-    value: string; 
-    progress: number; 
-    textClass?: string; 
-    progressClass?: string;
-    isHighlighted?: boolean;
-}) {
-    return (
-        <div className={`flex flex-col gap-0.5 p-0.5 rounded-lg transition-all duration-300 ${
-            isHighlighted 
-                ? 'bg-amber-400/20 border border-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.7)] ring-1 ring-amber-400/50' 
-                : 'border border-transparent'
-        }`}>
-            <div className="flex justify-between items-center text-[10px] uppercase font-mono leading-none">
-                <div className="flex items-center gap-1 min-w-0">
-                    <span className="text-zinc-300 font-bold whitespace-nowrap truncate">{label}</span>
-                    {isHighlighted && (
-                        <span className="text-[8px] font-black text-amber-300 bg-amber-400/30 px-1 py-0.2 rounded border border-amber-400/60 animate-pulse font-mono">
-                            +▲
-                        </span>
-                    )}
+            {/* Current Loadout */}
+            <div className="bg-zinc-950/70 p-2.5 px-3 border border-zinc-800/80 rounded-2xl backdrop-blur-md shadow-lg shrink-0">
+                <div className="flex justify-between items-center mb-1.5 pb-1 border-b border-zinc-800">
+                    <h3 className="text-xs font-black uppercase text-emerald-400 tracking-wider font-mono flex items-center gap-1.5">
+                        <Shield size={13} />
+                        {t('current_loadout', {}, 'LOADOUT')}
+                    </h3>
+                    <span className="text-[10px] font-black font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        {engine.player.weapons.length} {t('systems', {}, 'SYS')}
+                    </span>
                 </div>
-                <span className={`${textClass} font-black text-right ml-1 transition-all duration-300 ${
-                    isHighlighted ? 'scale-110 text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]' : ''
-                }`}>
-                    {value}
-                </span>
-            </div>
-            <div className={`h-1.5 bg-zinc-900 w-full rounded-full overflow-hidden border ${isHighlighted ? 'border-amber-400/80' : 'border-zinc-800/80'} p-0.5 flex items-center`}>
-                <motion.div 
-                    initial={false}
-                    animate={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
-                    transition={{ duration: 1.0, ease: "easeOut" }}
-                    className={`h-full rounded-full ${progressClass} ${isHighlighted ? 'brightness-125 shadow-[0_0_10px_#fff]' : ''}`}
-                />
+                <div className="space-y-1">
+                    {engine.player.weapons.length === 0 && <p className="text-zinc-500 text-[10px] italic font-mono">{t('no_systems_active')}</p>}
+                    {engine.player.weapons.map((w, i) => (
+                        <div key={i} className="flex justify-between items-center bg-black/40 px-2 py-0.5 rounded border border-zinc-800">
+                            <span className="font-mono text-[10px] uppercase text-zinc-200 font-bold truncate max-w-[150px]">
+                                {t('wp_' + w.type, {}, w.type.replace(/_/g, ' '))}
+                            </span>
+                            <span className="text-cyan-400 text-[10px] font-black font-mono">Lv.{w.level}</span>
+                        </div>
+                    ))}
+                </div>
             </div>
         </div>
     );

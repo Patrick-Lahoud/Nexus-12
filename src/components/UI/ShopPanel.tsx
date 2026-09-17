@@ -15,7 +15,6 @@ import {
   Cpu, 
   Wrench,
   Pickaxe,
-  Lock,
   X,
   Sparkles,
   Snowflake
@@ -24,6 +23,7 @@ import { gameAudio } from '../../game/audio';
 import { useLanguage } from '../../game/localization';
 import ConstructionGround from './ConstructionGround';
 import MiningZone from './MiningZone';
+import ControlShop from './ControlShop';
 
 interface ShopPanelProps {
   engine: GameEngine;
@@ -31,7 +31,8 @@ interface ShopPanelProps {
   onClose: () => void;
   isSandbox?: boolean;
   onUpdate?: () => void;
-  defaultTab?: 'STATS' | 'DEFENSE' | 'MINING';
+  defaultTab?: 'STATS' | 'SKILLS' | 'DEFENSE' | 'MINING';
+  room?: number;
 }
 
 const MOVEMENT_CATALOG = [
@@ -270,9 +271,9 @@ const STAT_THEMES: Record<string, {
   },
 };
 
-export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, isSandbox, onUpdate, defaultTab }) => {
+export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, isSandbox, onUpdate, defaultTab, room = 1 }) => {
   const { t } = useLanguage();
-  const [activeTab, setActiveTab] = useState<'STATS' | 'DEFENSE' | 'MINING'>(defaultTab || 'STATS');
+  const [activeTab, setActiveTab] = useState<'STATS' | 'SKILLS' | 'DEFENSE' | 'MINING'>(defaultTab || 'STATS');
   const [highlightedStatKey, setHighlightedStatKey] = useState<string | null>(null);
   
   useEffect(() => {
@@ -289,8 +290,7 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
   };
 
   const currentCurrency = engine.player.stats.currency;
-  const canAffordTurrets = !engine.player.stats.isTurretsUnlocked && (currentCurrency >= 10000 || isSandbox || engine.gameMode.includes('SANDBOX'));
-  const canAffordMines = !engine.player.stats.isMinesUnlocked && (currentCurrency >= 50000 || isSandbox || engine.gameMode.includes('SANDBOX'));
+  const skillsUnlocked = Boolean(engine.player.stats.isControlUnlocked || (engine.player.stats.ownedControls && engine.player.stats.ownedControls.length > 0) || isSandbox);
   const equippedModules = engine.player.stats.equippedMovementModules || [];
 
   const stats = [
@@ -498,34 +498,6 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
     }
   };
 
-  const handleUnlockTurrets = () => {
-    const cost = 10000;
-    if (currentCurrency >= cost || isSandbox || engine.gameMode.includes('SANDBOX')) {
-      if (!isSandbox && !engine.gameMode.includes('SANDBOX')) {
-        engine.player.stats.currency = Math.max(0, currentCurrency - cost);
-      }
-      engine.player.stats.isTurretsUnlocked = true;
-      gameAudio.playUpgradePickSound();
-      forceUpdate();
-    } else {
-      gameAudio.playHitSound(false, 'laser');
-    }
-  };
-
-  const handleUnlockMining = () => {
-    const cost = 50000;
-    if (currentCurrency >= cost || isSandbox || engine.gameMode.includes('SANDBOX')) {
-      if (!isSandbox && !engine.gameMode.includes('SANDBOX')) {
-        engine.player.stats.currency = Math.max(0, currentCurrency - cost);
-      }
-      engine.player.stats.isMinesUnlocked = true;
-      gameAudio.playUpgradePickSound();
-      forceUpdate();
-    } else {
-      gameAudio.playHitSound(false, 'laser');
-    }
-  };
-
   const [arenaRect, setArenaRect] = useState<DOMRect | null>(null);
 
   const isPlacing = Boolean(engine.placingTurretType || engine.placingMineType);
@@ -577,12 +549,12 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
 
           {/* Deployment Mode Banner */}
           {isPlacing && (
-            <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[60] pointer-events-auto bg-zinc-950/95 border-2 border-amber-400 p-4 px-7 rounded-2xl shadow-[0_0_60px_rgba(245,158,11,0.6)] text-center flex flex-col items-center gap-2 animate-pulse select-none">
+            <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[60] pointer-events-auto bg-zinc-950/95 border-2 border-amber-400 p-4 px-7 rounded-2xl shadow-[0_0_60px_rgba(245,158,11,0.6)] text-center flex flex-col items-center gap-2 select-none">
               <div className="flex items-center gap-2.5 text-amber-300 font-mono font-black text-sm uppercase tracking-wider">
                 <span className="w-3 h-3 rounded-full bg-amber-400 animate-ping inline-block" />
                 <span>DEPLOY YOUR {engine.placingTurretType ? 'DEFENSE TURRET' : 'MINING DRILL'}</span>
               </div>
-              <p className="text-zinc-300 text-xs font-sans">
+              <p className="text-zinc-300 text-xs">
                 Click anywhere on the battlefield canvas to place your deployable unit
               </p>
               <button
@@ -619,7 +591,7 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
                     <h2 className="text-lg font-black uppercase tracking-wider text-white font-mono flex items-center gap-2">
                       {t('shop', {}, 'ARMORY & SYSTEMS SHOP')}
                     </h2>
-                    <p className="text-zinc-400 text-xs font-sans">
+                    <p className="text-zinc-400 text-xs">
                       Upgrade core stats, deploy defense turrets, and manage mining drills.
                     </p>
                   </div>
@@ -647,7 +619,7 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
               </div>
 
               {/* Shop Navigation Tabs */}
-              <div className="grid grid-cols-3 gap-2 bg-zinc-900/80 p-1.5 rounded-2xl border border-zinc-800">
+              <div className="grid grid-cols-4 gap-2 bg-zinc-900/80 p-1.5 rounded-2xl border border-zinc-800">
                 <button
                   onClick={() => setActiveTab('STATS')}
                   className={`py-2 rounded-xl text-xs font-black font-mono uppercase transition-all flex items-center justify-center gap-2 cursor-pointer ${
@@ -661,6 +633,25 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
                 </button>
 
                 <button
+                  onClick={() => setActiveTab('SKILLS')}
+                  className={`py-2 rounded-xl text-xs font-black font-mono uppercase transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    activeTab === 'SKILLS'
+                      ? 'bg-cyan-400 text-black shadow-[0_0_18px_rgba(34,211,238,0.5)]'
+                      : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+                  }`}
+                >
+                  <Activity className="w-4 h-4" />
+                  <span>SKILLS</span>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-black ${
+                    skillsUnlocked 
+                      ? 'bg-emerald-500/20 text-emerald-300' 
+                      : 'bg-red-500/20 text-red-400'
+                  }`}>
+                    {skillsUnlocked ? 'ACTIVE' : 'LOCKED'}
+                  </span>
+                </button>
+
+                <button
                   onClick={() => setActiveTab('DEFENSE')}
                   className={`py-2 rounded-xl text-xs font-black font-mono uppercase transition-all flex items-center justify-center gap-2 cursor-pointer ${
                     activeTab === 'DEFENSE'
@@ -669,15 +660,13 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
                   }`}
                 >
                   <Wrench className="w-4 h-4" />
-                  <span>DEFENSE GRID</span>
+                  <span>DEFENSE</span>
                   <span className={`text-[9px] px-1.5 py-0.5 rounded font-black ${
                     engine.player.stats.isTurretsUnlocked 
                       ? 'bg-emerald-500/20 text-emerald-300' 
-                      : canAffordTurrets 
-                      ? 'bg-amber-400 text-black animate-pulse shadow-[0_0_10px_rgba(251,191,36,0.9)]'
                       : 'bg-red-500/20 text-red-400'
                   }`}>
-                    {engine.player.stats.isTurretsUnlocked ? 'ACTIVE' : canAffordTurrets ? 'READY!' : 'LOCKED'}
+                    {engine.player.stats.isTurretsUnlocked ? 'ACTIVE' : 'LOCKED'}
                   </span>
                 </button>
 
@@ -690,15 +679,13 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
                   }`}
                 >
                   <Pickaxe className="w-4 h-4" />
-                  <span>MINING DRILLS</span>
+                  <span>MINING</span>
                   <span className={`text-[9px] px-1.5 py-0.5 rounded font-black ${
                     engine.player.stats.isMinesUnlocked 
                       ? 'bg-emerald-500/20 text-emerald-300' 
-                      : canAffordMines 
-                      ? 'bg-emerald-400 text-black animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.9)]'
                       : 'bg-red-500/20 text-red-400'
                   }`}>
-                    {engine.player.stats.isMinesUnlocked ? 'ACTIVE' : canAffordMines ? 'READY!' : 'LOCKED'}
+                    {engine.player.stats.isMinesUnlocked ? 'ACTIVE' : 'LOCKED'}
                   </span>
                 </button>
               </div>
@@ -720,7 +707,11 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
                       </div>
                       <button
                         onClick={() => {
-                          engine.player.isInvincible = !engine.player.isInvincible;
+                          const next = !engine.player.isInvincible;
+                          engine.player.isInvincible = next;
+                          // Keep the master flag in sync so the state survives
+                          // player recreation (new run, checkpoint, resume).
+                          engine.godMode = next;
                           gameAudio.playHitSound(false, 'impact');
                           forceUpdate();
                         }}
@@ -784,7 +775,7 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
                           {/* Left: Icon, Stat Label & Increment info */}
                           <div className="flex items-center gap-2.5 min-w-[180px] shrink-0">
                             <div className={`w-7 h-7 rounded-lg bg-black/60 border ${isHighlighted ? 'border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]' : 'border-zinc-800'} flex items-center justify-center shrink-0 transition-all`}>
-                              <stat.icon className={`w-3.5 h-3.5 ${isHighlighted ? 'text-amber-300 animate-pulse' : theme.iconText}`} />
+                              <stat.icon className={`w-3.5 h-3.5 ${isHighlighted ? 'text-amber-300' : theme.iconText}`} />
                             </div>
                             <div className="flex flex-col">
                               <div className="flex items-center gap-1.5">
@@ -792,7 +783,7 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
                                   {stat.label}
                                 </span>
                                 {isHighlighted && (
-                                  <span className="text-[9px] font-mono font-black text-amber-300 bg-amber-500/30 px-1.5 py-0.2 rounded border border-amber-400/80 animate-pulse">
+                                  <span className="text-[9px] font-mono font-black text-amber-300 bg-amber-500/30 px-1.5 py-0.2 rounded border border-amber-400/80">
                                     +▲ UPGRADED
                                   </span>
                                 )}
@@ -828,16 +819,16 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
                               <button 
                                 onClick={() => buyStat(stat)}
                                 disabled={!isSandbox && currentCurrency < cost}
-                                className={`w-full sm:w-auto min-w-[145px] py-1.5 px-3 font-mono text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center ${
+                                className={`w-full sm:w-auto min-w-[92px] py-1.5 px-3 font-mono text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center ${
                                   isSandbox || currentCurrency >= cost 
                                     ? `${theme.btn} ${theme.btnText} ${theme.shadow} font-black` 
                                     : 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
                                 }`}
                               >
-                                {isSandbox ? 'UPGRADE (FREE)' : `UPGRADE (${cost.toLocaleString()} Cr)`}
+                                {isSandbox ? 'FREE' : `${cost.toLocaleString()} Cr`}
                               </button>
                             ) : (
-                              <span className="block w-full sm:w-auto min-w-[145px] text-center text-[11px] font-mono font-black text-emerald-400 bg-emerald-500/10 py-1.5 px-2 border border-emerald-500/30 rounded-xl uppercase tracking-wider">
+                              <span className="block w-full sm:w-auto min-w-[92px] text-center text-[11px] font-mono font-black text-emerald-400 bg-emerald-500/10 py-1.5 px-2 border border-emerald-500/30 rounded-xl uppercase tracking-wider">
                                 MAX LEVEL
                               </span>
                             )}
@@ -849,40 +840,47 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
                 </div>
               )}
 
+              {activeTab === 'SKILLS' && (
+                skillsUnlocked ? (
+                  <ControlShop
+                    embedded
+                    isOpen={activeTab === 'SKILLS'}
+                    engine={engine}
+                    onClose={onClose}
+                    onUpdate={onUpdate}
+                    isSandbox={isSandbox}
+                    room={room}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-8 text-center bg-zinc-900/60 border border-zinc-800 rounded-2xl h-full gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border-2 border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                      <Activity className="w-6 h-6" />
+                    </div>
+                    <span className="text-xs font-black font-mono uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-3 py-1 rounded-full">
+                      UNLOCK AT LEVEL 20
+                    </span>
+                    <h3 className="text-lg not-italic font-black text-white uppercase tracking-wider font-mono">SKILLS</h3>
+                    <p className="text-sm text-zinc-300 leading-relaxed max-w-sm">
+                      Equip mouse-bound skills to control the battlefield.
+                    </p>
+                  </div>
+                )
+              )}
+
               {activeTab === 'DEFENSE' && (
                 <div className="h-full">
                   {!engine.player.stats.isTurretsUnlocked ? (
-                    <div className="flex flex-col items-center justify-center p-8 text-center bg-zinc-900/60 border border-zinc-800 rounded-2xl h-full gap-5">
-                      <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border-2 border-amber-500/40 flex items-center justify-center text-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.25)]">
-                        <Wrench className="w-8 h-8" />
+                    <div className="flex flex-col items-center justify-center p-8 text-center bg-zinc-900/60 border border-zinc-800 rounded-2xl h-full gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 flex items-center justify-center text-amber-400">
+                        <Wrench className="w-6 h-6" />
                       </div>
-                      <div className="max-w-md space-y-2">
-                        <span className="text-xs font-black font-mono uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30 px-3 py-1 rounded-full inline-block mb-1">
-                          RECOMMENDED ROUND 10+
-                        </span>
-                        <h3 className="text-lg font-black text-white uppercase tracking-wider font-mono">DEFENSE SENTRY TURRETS</h3>
-                        <p className="text-sm text-zinc-300 leading-relaxed font-sans">
-                          Build automated stationary sentries directly on the battlefield to blast enemies with laser swords, electric arc beams, and heavy kinetic mortar shells!
-                        </p>
-                      </div>
-
-                      <div className="w-full max-w-xs space-y-3 pt-2">
-                        <div className="bg-black/50 border border-zinc-800 p-3 rounded-xl flex justify-between items-center text-sm font-mono">
-                          <span className="text-zinc-400 font-bold">UNLOCK COST:</span>
-                          <span className="text-amber-400 font-black">{isSandbox || engine.gameMode.includes('SANDBOX') ? 'FREE' : '10,000 Cr'}</span>
-                        </div>
-                        <button
-                          onClick={handleUnlockTurrets}
-                          className={`w-full py-3 rounded-xl text-xs font-black font-mono transition-all uppercase cursor-pointer flex items-center justify-center gap-2 ${
-                            currentCurrency >= 10000 || isSandbox || engine.gameMode.includes('SANDBOX')
-                              ? 'bg-amber-400 hover:bg-amber-300 text-black shadow-[0_0_20px_rgba(251,191,36,0.4)] animate-pulse'
-                              : 'bg-zinc-800 border border-zinc-700 text-zinc-500 cursor-not-allowed'
-                          }`}
-                        >
-                          <Lock className="w-4 h-4" />
-                          <span>UNLOCK DEFENSE GRID</span>
-                        </button>
-                      </div>
+                      <span className="text-xs font-black font-mono uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30 px-3 py-1 rounded-full">
+                        UNLOCK AT LEVEL 30
+                      </span>
+                      <h3 className="text-lg not-italic font-black text-white uppercase tracking-wider font-mono">DEFENSE</h3>
+                      <p className="text-sm text-zinc-300 leading-relaxed max-w-sm">
+                        Deploy automated sentries on the battlefield to fight alongside you.
+                      </p>
                     </div>
                   ) : (
                     <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 h-full">
@@ -895,37 +893,17 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
               {activeTab === 'MINING' && (
                 <div className="h-full">
                   {!engine.player.stats.isMinesUnlocked ? (
-                    <div className="flex flex-col items-center justify-center p-8 text-center bg-zinc-900/60 border border-zinc-800 rounded-2xl h-full gap-5">
-                      <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border-2 border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-[0_0_30px_rgba(16,185,129,0.25)]">
-                        <Pickaxe className="w-8 h-8" />
+                    <div className="flex flex-col items-center justify-center p-8 text-center bg-zinc-900/60 border border-zinc-800 rounded-2xl h-full gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                        <Pickaxe className="w-6 h-6" />
                       </div>
-                      <div className="max-w-md space-y-2">
-                        <span className="text-xs font-black font-mono uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-full inline-block mb-1">
-                          RECOMMENDED ROUND 20+
-                        </span>
-                        <h3 className="text-lg font-black text-white uppercase tracking-wider font-mono">AUTOMATED MINING DRILLS</h3>
-                        <p className="text-sm text-zinc-300 leading-relaxed font-sans">
-                          Deploy subterranean mineral drills that extract valuable ore and continuously generate passive Credits every second!
-                        </p>
-                      </div>
-
-                      <div className="w-full max-w-xs space-y-3 pt-2">
-                        <div className="bg-black/50 border border-zinc-800 p-3 rounded-xl flex justify-between items-center text-sm font-mono">
-                          <span className="text-zinc-400 font-bold">UNLOCK COST:</span>
-                          <span className="text-emerald-400 font-black">{isSandbox || engine.gameMode.includes('SANDBOX') ? 'FREE' : '50,000 Cr'}</span>
-                        </div>
-                        <button
-                          onClick={handleUnlockMining}
-                          className={`w-full py-3 rounded-xl text-xs font-black font-mono transition-all uppercase cursor-pointer flex items-center justify-center gap-2 ${
-                            currentCurrency >= 50000 || isSandbox || engine.gameMode.includes('SANDBOX')
-                              ? 'bg-emerald-400 hover:bg-emerald-300 text-black shadow-[0_0_20px_rgba(16,185,129,0.4)] animate-pulse'
-                              : 'bg-zinc-800 border border-zinc-700 text-zinc-500 cursor-not-allowed'
-                          }`}
-                        >
-                          <Lock className="w-4 h-4" />
-                          <span>UNLOCK MINING OPERATIONS</span>
-                        </button>
-                      </div>
+                      <span className="text-xs font-black font-mono uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-full">
+                        UNLOCK AT LEVEL 40
+                      </span>
+                      <h3 className="text-lg not-italic font-black text-white uppercase tracking-wider font-mono">MINING</h3>
+                      <p className="text-sm text-zinc-300 leading-relaxed max-w-sm">
+                        Deploy drills that extract ore for passive credits over time.
+                      </p>
                     </div>
                   ) : (
                     <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 h-full">

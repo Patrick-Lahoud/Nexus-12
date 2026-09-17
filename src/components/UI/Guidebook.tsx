@@ -1,10 +1,12 @@
 import React from 'react';
+import { motion } from 'motion/react';
 import { BookOpen, X, Shield, Zap, RefreshCw, EyeOff, Lock } from 'lucide-react';
 import { useLanguage } from '../../game/localization';
 
 interface GuidebookProps {
   isOpen: boolean;
   onClose: () => void;
+  isSandbox?: boolean;
 }
 
 // Highly stylized SVG representations for each enemy to serve as visual images
@@ -344,7 +346,7 @@ const ReaperSVG = () => (
   </svg>
 );
 
-export default function Guidebook({ isOpen, onClose }: GuidebookProps) {
+export default function Guidebook({ isOpen, onClose, isSandbox }: GuidebookProps) {
   const { t } = useLanguage();
   if (!isOpen) return null;
 
@@ -377,12 +379,19 @@ export default function Guidebook({ isOpen, onClose }: GuidebookProps) {
 
   const isSectorUnlocked = (id: string): boolean => {
     if (isDevMode) return true;
+    if (isSandbox) return true; // Sandbox: entire guidebook unlocked
     switch (id) {
       case 'sector1': return true;
       case 'sector2': return highestRoom >= 11;
       case 'sector3': return highestRoom >= 21;
       case 'sector4': return highestRoom >= 31;
       case 'sector5': return highestRoom >= 41;
+      case 'sector6': return highestRoom >= 51;
+      case 'sector7': return highestRoom >= 61;
+      case 'sector8': return highestRoom >= 71;
+      case 'sector9': return highestRoom >= 81;
+      case 'sector10': return highestRoom >= 91;
+      case 'sector11': return highestRoom >= 101;
       default: return true;
     }
   };
@@ -393,6 +402,12 @@ export default function Guidebook({ isOpen, onClose }: GuidebookProps) {
       case 'sector3': return 21;
       case 'sector4': return 31;
       case 'sector5': return 41;
+      case 'sector6': return 51;
+      case 'sector7': return 61;
+      case 'sector8': return 71;
+      case 'sector9': return 81;
+      case 'sector10': return 91;
+      case 'sector11': return 101;
       default: return 0;
     }
   };
@@ -400,7 +415,7 @@ export default function Guidebook({ isOpen, onClose }: GuidebookProps) {
   const journeySectors = [
     {
       id: 'sector1',
-      title: t('sector_title_1', {}, 'Sectors 1-10 — Crimson Alpha'),
+      title: t('sector_title_1', {}, 'Sectors 1-10: Crimson Alpha'),
       color: 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]',
       enemies: [
         { name: t('enemy_runner', {}, 'Runner'), description: t('enemy_runner_desc', {}, 'Basic fast chaser. Aggressively follows and crashes into target targets.'), svg: <RunnerSVG /> },
@@ -416,7 +431,7 @@ export default function Guidebook({ isOpen, onClose }: GuidebookProps) {
     },
     {
       id: 'sector2',
-      title: t('sector_title_2', {}, 'Sectors 11-20 — Frozen Caverns'),
+      title: t('sector_title_2', {}, 'Sectors 11-20: Frozen Caverns'),
       color: 'bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.5)]',
       enemies: [
         { name: t('enemy_shielded', {}, 'Force Field Chaser'), description: t('enemy_shielded_desc', {}, 'Shielded node. Protected by a rotating force-field shell that deflects straightforward kinetic strikes.'), svg: <ShieldedSVG /> },
@@ -431,7 +446,7 @@ export default function Guidebook({ isOpen, onClose }: GuidebookProps) {
     },
     {
       id: 'sector3',
-      title: t('sector_title_3', {}, 'Sectors 21-30 — Magnetic Ruins'),
+      title: t('sector_title_3', {}, 'Sectors 21-30: Magnetic Ruins'),
       color: 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]',
       enemies: [
         { name: t('enemy_gunner', {}, 'Gunner'), description: t('enemy_gunner_desc', {}, 'Heavy machine Gun. Rapidly unloads bursts of projectiles with high density.'), svg: <GunnerSVG /> },
@@ -447,7 +462,7 @@ export default function Guidebook({ isOpen, onClose }: GuidebookProps) {
     },
     {
       id: 'sector4',
-      title: t('sector_title_4', {}, 'Sectors 31-40 — Ionized Clouds'),
+      title: t('sector_title_4', {}, 'Sectors 31-40: Ionized Clouds'),
       color: 'bg-yellow-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]',
       enemies: [
         { name: t('enemy_swarmer', {}, 'Swarmer'), description: t('enemy_swarmer_desc', {}, 'Insectoid swarm. Extremely tiny, very fast, and swarms the player in tightly packed tactical groups.'), svg: <SwarmerSVG /> },
@@ -466,15 +481,89 @@ export default function Guidebook({ isOpen, onClose }: GuidebookProps) {
     },
     {
       id: 'sector5',
-      title: t('sector_title_5', {}, 'Sectors 41+ — The Void Abyss'),
+      title: t('sector_title_5', {}, 'Sectors 41-50: The Void Abyss'),
       color: 'bg-purple-600 shadow-[0_0_10px_rgba(168,85,247,0.5)]',
       enemies: [
-        { name: t('enemy_void_marauder', {}, 'Void Marauder'), description: t('enemy_void_marauder_desc', {}, 'Extreme void chasers equipped with active defensive shields and heavy attributes.'), svg: <RunnerSVG /> },
+        { name: t('enemy_void_marauder', {}, 'Void Marauder'), description: t('enemy_void_marauder_desc', {}, 'Blink predator. Short-range teleports toward the player, then lunges with a burst of speed.'), svg: <RunnerSVG /> },
       ],
       boss: {
         name: t('boss_void_sentinel', {}, 'VOID SENTINEL'),
-        description: t('boss_void_sentinel_desc', {}, 'Black hole master. Generates spatial vacuum drags while unleashing 8-fold and 16-fold devastating void waves.'),
+        description: t('boss_void_sentinel_desc', {}, 'Black hole master. Anchors at the arena center as a singularity, unleashing 8-fold and 16-fold devastating void waves.'),
         svg: <VoidSentinelSVG />,
+      },
+    },
+    {
+      id: 'sector6',
+      title: t('sector_title_6', {}, 'Sectors 51-60: The Fractured Timeline'),
+      color: 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]',
+      enemies: [
+        { name: t('enemy_time_eater', {}, 'Time Eater'), description: t('enemy_time_eater_desc', {}, 'Temporal parasite. Pulses a slowing aura and fires chrono bolts that chill your engines.'), svg: <RunnerSVG /> },
+      ],
+      boss: {
+        name: t('boss_swarm_queen', {}, 'SWARM QUEEN'),
+        description: t('boss_swarm_queen_desc', {}, 'Organic sovereign on a figure-8 brood flight. Rapidly spawns SWARMER defenders and unloads toxic spread volleys.'),
+        svg: <SwarmQueenSVG />,
+      },
+    },
+    {
+      id: 'sector7',
+      title: t('sector_title_7', {}, 'Sectors 61-70: The Collapsing Rift'),
+      color: 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]',
+      enemies: [
+        { name: t('enemy_singularity_seed', {}, 'Singularity Seed'), description: t('enemy_singularity_seed_desc', {}, 'Collapsing core. Pulls you inward constantly and implodes into a damaging gravity well if left alone.'), svg: <RunnerSVG /> },
+      ],
+      boss: {
+        name: t('boss_chrono_warden', {}, 'CHRONO WARDEN'),
+        description: t('boss_chrono_warden_desc', {}, 'Clockwork timekeeper. Phases in drifting arcs, fires time-lock bolts and triple echo volleys, and detonates temporal rifts.'),
+        svg: <VoidSentinelSVG />,
+      },
+    },
+    {
+      id: 'sector8',
+      title: t('sector_title_8', {}, 'Sectors 71-80: The Pendulum Expanse'),
+      color: 'bg-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.5)]',
+      enemies: [],
+      boss: {
+        name: t('boss_graviton_core', {}, 'GRAVITON CORE'),
+        description: t('boss_graviton_core_desc', {}, 'Living singularity. Swings across the arena in pendulum sweeps, drags you inward constantly, and detonates 20-way gravity shockwaves.'),
+        svg: <VoidSentinelSVG />,
+      },
+    },
+    {
+      id: 'sector9',
+      title: t('sector_title_9', {}, 'Sectors 81-90: The Blighted Wastes'),
+      color: 'bg-lime-500 shadow-[0_0_10px_rgba(132,204,22,0.5)]',
+      enemies: [
+        { name: t('enemy_plague_spreader', {}, 'Plague Spreader'), description: t('enemy_plague_spreader_desc', {}, 'Contagion carrier. Pulses lingering plague clouds that corrode anything inside them.'), svg: <RunnerSVG /> },
+      ],
+      boss: {
+        name: t('boss_plague_lord', {}, 'PLAGUE LORD'),
+        description: t('boss_plague_lord_desc', {}, 'Bile titan. Drifts forward spewing contagion, summons BIO_LEECH thralls, and detonates pandemic spore rings.'),
+        svg: <ReaperSVG />,
+      },
+    },
+    {
+      id: 'sector10',
+      title: t('sector_title_10', {}, 'Sectors 91-100: The Frozen Crown'),
+      color: 'bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.5)]',
+      enemies: [
+        { name: t('enemy_frost_tyrant', {}, 'Frost Tyrant'), description: t('enemy_frost_tyrant_desc', {}, 'Blizzard tyrant. Bursts radial ice shard storms that chill whatever they touch.'), svg: <RunnerSVG /> },
+      ],
+      boss: {
+        name: t('boss_cryo_sovereign', {}, 'CRYO SOVEREIGN'),
+        description: t('boss_cryo_sovereign_desc', {}, 'FINAL BOSS. A glacial crystal fortress that descends relentlessly, unleashing counter-rotating ice spirals and the screen-wide Absolute Zero blizzard.'),
+        svg: <VoidSentinelSVG />,
+      },
+    },
+    {
+      id: 'sector11',
+      title: t('sector_title_11', {}, 'Sectors 101+: The Endless Loop'),
+      color: 'bg-zinc-400 shadow-[0_0_10px_rgba(161,161,170,0.5)]',
+      enemies: [],
+      boss: {
+        name: t('boss_endless', {}, 'THE ENDLESS ROTATION'),
+        description: t('boss_endless_desc', {}, 'Beyond Room 100, every enemy ever catalogued returns in rotating waves, and the three exclusive sovereigns (ARCHITECT, SWARM QUEEN, REAPER) cycle at random.'),
+        svg: <ArchitectSVG />,
       },
     }
   ];
@@ -487,26 +576,26 @@ export default function Guidebook({ isOpen, onClose }: GuidebookProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md select-none">
-      <div className="relative w-full max-w-4xl h-[620px] space-ui-bg border-2 border-cyan-500/40 rounded-2xl shadow-[0_0_50px_rgba(6,182,212,0.25)] flex flex-col overflow-hidden">
-        {/* Decorative Grid Lines */}
-        <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1.2px,transparent_1.2px)] [background-size:18px_18px] opacity-20 pointer-events-none" />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        transition={{ duration: 0.15 }}
+        className="relative w-full max-w-5xl h-[94vh] sm:h-[92vh] bg-[#040404] border-[6px] border-zinc-800 rounded-xl shadow-[0_0_90px_rgba(0,0,0,0.95),inset_0_0_80px_rgba(0,0,0,0.55)] flex flex-col overflow-hidden"
+      >
         {/* Header */}
-        <div className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 bg-zinc-950/80">
+        <div className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-emerald-500/15 bg-black/70 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-cyan-950/60 border border-cyan-500/40 rounded-xl text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)]">
-              <BookOpen size={24} className="animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-sans font-black text-white uppercase tracking-wider text-xl">
-                  {t('handbook', {}, 'Handbook')}
-                </h2>
-                {isDevMode && (
-                  <span className="px-2 py-0.5 text-xs bg-red-950/80 text-red-400 border border-red-500/30 rounded font-mono font-black animate-pulse uppercase tracking-wider">
-                    // DEV MODE ACTIVE
-                  </span>
-                )}
-              </div>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)] animate-pulse shrink-0" />
+            <div className="flex items-center gap-2">
+              <h2 className="not-italic font-mono font-black text-emerald-400 uppercase tracking-[0.25em] text-lg">
+                {t('handbook', {}, 'Handbook')}
+              </h2>
+              {isDevMode && (
+                <span className="px-2 py-0.5 text-xs bg-red-950/80 text-red-400 border border-red-500/30 rounded font-mono font-black uppercase tracking-wider">
+                  // DEV MODE ACTIVE
+                </span>
+              )}
             </div>
           </div>
           <button 
@@ -626,12 +715,12 @@ export default function Guidebook({ isOpen, onClose }: GuidebookProps) {
                           </p>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
                             <div className="p-3 bg-[#0a0a14] border border-amber-600/35 rounded-xl flex items-start gap-3 text-xs">
-                              <div className="p-1.5 bg-amber-500/20 border border-amber-500/40 rounded-lg text-amber-400 shrink-0 mt-0.5 animate-pulse">
+                              <div className="p-1.5 bg-amber-500/20 border border-amber-500/40 rounded-lg text-amber-400 shrink-0 mt-0.5">
                                 <Shield size={14} />
                               </div>
                               <div>
                                 <h4 className="font-bold text-amber-300 uppercase font-mono mb-0.5">{t('spawn_immunity', {}, 'SPAWN IMMUNITY')}</h4>
-                                <p className="text-zinc-300 leading-relaxed font-sans">{t('spawn_immunity_desc', {}, 'Gold Matrix: Invulnerable for exactly 1.0 second upon arena manifestation.')}</p>
+                                <p className="text-zinc-300 leading-relaxed">{t('spawn_immunity_desc', {}, 'Gold Matrix: Invulnerable for exactly 1.0 second upon arena manifestation.')}</p>
                               </div>
                             </div>
 
@@ -641,7 +730,7 @@ export default function Guidebook({ isOpen, onClose }: GuidebookProps) {
                               </div>
                               <div>
                                 <h4 className="font-bold text-cyan-300 uppercase font-mono mb-0.5">{t('periodic_ridge', {}, 'PERIODIC RIDGE')}</h4>
-                                <p className="text-zinc-300 leading-relaxed font-sans">{t('periodic_ridge_desc', {}, 'Cyan Barrier: Swaps between active and vulnerable states every 3.0 seconds.')}</p>
+                                <p className="text-zinc-300 leading-relaxed">{t('periodic_ridge_desc', {}, 'Cyan Barrier: Swaps between active and vulnerable states every 3.0 seconds.')}</p>
                               </div>
                             </div>
 
@@ -651,7 +740,7 @@ export default function Guidebook({ isOpen, onClose }: GuidebookProps) {
                               </div>
                               <div>
                                 <h4 className="font-bold text-orange-300 uppercase font-mono mb-0.5">{t('directional_shield', {}, 'DIRECTIONAL SHIELD')}</h4>
-                                <p className="text-zinc-300 leading-relaxed font-sans">{t('directional_shield_desc', {}, 'Orange Arc: Blocks a 115° front sector facing the player. Maneuver to strike from behind!')}</p>
+                                <p className="text-zinc-300 leading-relaxed">{t('directional_shield_desc', {}, 'Orange Arc: Blocks a 115° front sector facing the player. Maneuver to strike from behind!')}</p>
                               </div>
                             </div>
 
@@ -661,7 +750,7 @@ export default function Guidebook({ isOpen, onClose }: GuidebookProps) {
                               </div>
                               <div>
                                 <h4 className="font-bold text-pink-300 uppercase font-mono mb-0.5">{t('gap_weakness', {}, 'GAP WEAKNESS (VULNERABLE)')}</h4>
-                                <p className="text-zinc-300 leading-relaxed font-sans">{t('gap_weakness_desc', {}, 'Pink Orbit: Full defensive ring with a moving / spinning 75° weakness gap. Strike the open channel.')}</p>
+                                <p className="text-zinc-300 leading-relaxed">{t('gap_weakness_desc', {}, 'Pink Orbit: Full defensive ring with a moving / spinning 75° weakness gap. Strike the open channel.')}</p>
                               </div>
                             </div>
                           </div>
@@ -710,15 +799,15 @@ export default function Guidebook({ isOpen, onClose }: GuidebookProps) {
         </div>
 
         {/* Footer */}
-        <div className="relative z-10 px-6 py-4 border-t border-zinc-900 bg-zinc-950/90 flex justify-end items-center">
+        <div className="relative z-10 px-6 py-4 border-t border-emerald-500/15 bg-black/70 flex justify-end items-center">
           <button 
             onClick={onClose}
-            className="bg-cyan-600 border border-cyan-400 text-black text-xs font-black uppercase px-6 py-2.5 hover:bg-cyan-500 hover:shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all cursor-pointer rounded-xl font-mono"
+            className="bg-emerald-600 border border-emerald-400 text-black text-xs font-black uppercase px-6 py-2.5 hover:bg-emerald-500 hover:shadow-[0_0_15px_rgba(52,211,153,0.4)] transition-all cursor-pointer rounded-xl font-mono"
           >
             {t('dismiss_report', {}, 'DISMISS REPORT')}
           </button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

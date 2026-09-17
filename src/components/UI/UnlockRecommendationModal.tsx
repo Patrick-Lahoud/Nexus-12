@@ -19,8 +19,6 @@ export type UnlockType = 'DEFENSE' | 'MINING' | 'SKILLS';
 interface UnlockRecommendationModalProps {
   isOpen: boolean;
   type: UnlockType | null;
-  room: number;
-  currency: number;
   isSandbox?: boolean;
   onOpenShopTab: (tab: UnlockType) => void;
   onClose: () => void;
@@ -29,8 +27,6 @@ interface UnlockRecommendationModalProps {
 export const UnlockRecommendationModal: React.FC<UnlockRecommendationModalProps> = ({
   isOpen,
   type,
-  room,
-  currency,
   isSandbox,
   onOpenShopTab,
   onClose
@@ -43,8 +39,7 @@ export const UnlockRecommendationModal: React.FC<UnlockRecommendationModalProps>
   const isSkills = type === 'SKILLS';
   const isMining = type === 'MINING';
 
-  const cost = isDefense ? 10000 : isSkills ? 2500 : 50000;
-  const recommendedRound = isDefense ? 20 : isSkills ? 20 : 30;
+  const unlockLevel = isDefense ? 30 : isSkills ? 20 : 40;
 
   const handleAction = () => {
     gameAudio.playUpgradePickSound();
@@ -77,13 +72,6 @@ export const UnlockRecommendationModal: React.FC<UnlockRecommendationModalProps>
               : 'border-emerald-400/80 shadow-[0_0_60px_rgba(52,211,153,0.35)]'
           }`}
         >
-          {/* Ambient Glow background */}
-          <div 
-            className={`absolute -top-24 -right-24 w-60 h-60 rounded-full blur-3xl pointer-events-none opacity-20 ${
-              isDefense ? 'bg-amber-400' : isSkills ? 'bg-cyan-400' : 'bg-emerald-400'
-            }`} 
-          />
-
           {/* Close button */}
           <button
             onClick={onClose}
@@ -101,8 +89,8 @@ export const UnlockRecommendationModal: React.FC<UnlockRecommendationModalProps>
                 ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-cyan-500/10'
                 : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-emerald-500/10'
             }`}>
-              <Award size={14} className="animate-bounce" />
-              <span>FUNDS AVAILABLE</span>
+              <Award size={14} />
+              <span>LEVEL {unlockLevel} REACHED</span>
             </span>
           </div>
 
@@ -115,49 +103,21 @@ export const UnlockRecommendationModal: React.FC<UnlockRecommendationModalProps>
                 ? 'bg-cyan-500/15 border-cyan-400 text-cyan-400 shadow-[0_0_25px_rgba(34,211,238,0.4)]'
                 : 'bg-emerald-500/15 border-emerald-400 text-emerald-400 shadow-[0_0_25px_rgba(52,211,153,0.4)]'
             }`}>
-              {isDefense ? <Wrench size={32} className="animate-pulse" /> : isSkills ? <Zap size={32} className="animate-pulse" /> : <Pickaxe size={32} className="animate-pulse" />}
+              {isDefense ? <Wrench size={32} /> : isSkills ? <Zap size={32} /> : <Pickaxe size={32} />}
             </div>
 
             <div className="flex-1 space-y-1">
               <h3 className="text-xl sm:text-2xl font-black font-mono uppercase tracking-wide text-white leading-tight">
-                {isDefense ? 'DEFENSE GRID READY!' : isSkills ? 'TACTICAL SKILLS READY!' : 'MINING OPERATIONS READY!'}
+                {isDefense ? 'DEFENSE UNLOCKED' : isSkills ? 'SKILLS UNLOCKED' : 'MINING UNLOCKED'}
               </h3>
-              <p className="text-xs text-zinc-400 font-sans font-medium">
+              <p className="text-xs text-zinc-400 font-medium">
                 {isDefense 
-                  ? 'Accumulated required credits to purchase and deploy automated battlefield sentries.' 
+                  ? 'Automated battlefield sentries are now available in the shop.' 
                   : isSkills
-                  ? 'Accumulated required credits to unlock active mouse-bound tactical combat skills.'
-                  : 'Accumulated required credits to purchase and deploy subterranean mining drills.'}
+                  ? 'Active mouse-bound tactical skills are now available in the shop.'
+                  : 'Passive mining drills are now available in the shop.'}
               </p>
             </div>
-          </div>
-
-          {/* Feature Highlights Box */}
-          <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-4 space-y-3 font-mono">
-            <div className="flex justify-between items-center text-xs pb-2 border-b border-zinc-800">
-              <span className="text-zinc-400 font-bold uppercase">REQUIRED FUNDS:</span>
-              <span className={`font-black flex items-center gap-1.5 ${
-                isDefense ? 'text-amber-300' : isSkills ? 'text-cyan-300' : 'text-emerald-300'
-              }`}>
-                <Coins size={14} />
-                <span>{isSandbox ? 'FREE' : `${cost.toLocaleString()} Cr`}</span>
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-zinc-400 font-bold uppercase">YOUR BALANCE:</span>
-              <span className="text-white font-black">
-                {isSandbox ? 'UNLIMITED' : `${Math.round(currency).toLocaleString()} Cr`}
-              </span>
-            </div>
-
-            <p className="text-xs text-zinc-300 font-sans leading-relaxed pt-1">
-              {isDefense
-                ? 'Construct laser blade spinners, electric shock coils, and heavy kinetic mortars directly on the arena floor to automate defensive firepower.'
-                : isSkills
-                ? 'Unlock & equip active mouse-bound tactical skills like Kinetic Shockwaves, Teleportation Portals, Gravity Singularity Wells, and Stasis Freeze fields.'
-                : 'Deploy underground mining rigs that continuously extract valuable minerals, generating passive Credits every second as you battle.'}
-            </p>
           </div>
 
           {/* Action Buttons */}
@@ -166,13 +126,13 @@ export const UnlockRecommendationModal: React.FC<UnlockRecommendationModalProps>
               onClick={handleAction}
               className={`flex-1 py-3.5 px-5 rounded-2xl font-black font-mono text-xs sm:text-sm uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg ${
                 isDefense
-                  ? 'bg-amber-400 hover:bg-amber-300 text-black shadow-[0_0_25px_rgba(245,158,11,0.5)] animate-pulse'
+                  ? 'bg-amber-400 hover:bg-amber-300 text-black shadow-[0_0_25px_rgba(245,158,11,0.5)]'
                   : isSkills
-                  ? 'bg-cyan-400 hover:bg-cyan-300 text-black shadow-[0_0_25px_rgba(34,211,238,0.5)] animate-pulse'
-                  : 'bg-emerald-400 hover:bg-emerald-300 text-black shadow-[0_0_25px_rgba(52,211,153,0.5)] animate-pulse'
+                  ? 'bg-cyan-400 hover:bg-cyan-300 text-black shadow-[0_0_25px_rgba(34,211,238,0.5)]'
+                  : 'bg-emerald-400 hover:bg-emerald-300 text-black shadow-[0_0_25px_rgba(52,211,153,0.5)]'
               }`}
             >
-              <span>{isSkills ? 'OPEN TACTICAL SKILLS' : 'OPEN SHOP & UNLOCK NOW'}</span>
+              <span>{isSkills ? 'OPEN TACTICAL SKILLS' : 'OPEN SHOP'}</span>
               <ArrowRight size={16} />
             </button>
 

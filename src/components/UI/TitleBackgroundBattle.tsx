@@ -373,6 +373,20 @@ export default function TitleBackgroundBattle() {
         ctx.closePath();
       };
 
+      // Adds the arena outline as a subpath (no beginPath) for even-odd composite fills
+      const addArenaSubpath = () => {
+        ctx.moveTo(arenaX + CR, arenaY);
+        ctx.lineTo(arenaX + arenaW - CR, arenaY);
+        ctx.quadraticCurveTo(arenaX + arenaW, arenaY, arenaX + arenaW, arenaY + CR);
+        ctx.lineTo(arenaX + arenaW, arenaY + arenaH - CR);
+        ctx.quadraticCurveTo(arenaX + arenaW, arenaY + arenaH, arenaX + arenaW - CR, arenaY + arenaH);
+        ctx.lineTo(arenaX + CR, arenaY + arenaH);
+        ctx.quadraticCurveTo(arenaX, arenaY + arenaH, arenaX, arenaY + arenaH - CR);
+        ctx.lineTo(arenaX, arenaY + CR);
+        ctx.quadraticCurveTo(arenaX, arenaY, arenaX + CR, arenaY);
+        ctx.closePath();
+      };
+
       const spawnEnemyOnEdge = () => {
         const edge = Math.floor(Math.random() * 4);
         let x = 0;
@@ -536,6 +550,18 @@ export default function TitleBackgroundBattle() {
       ctx.lineTo(arenaX + arenaW + 6, arenaY + arenaH + 6);
       ctx.lineTo(arenaX + arenaW + 6, arenaY + arenaH - bLen);
       ctx.stroke();
+      ctx.restore();
+
+      // -------------------------------------------------------------
+      // SOLID BLACK SURROUND: everything outside the arena cutout is pure
+      // black, matching the real game's cutout look (even-odd fill).
+      // -------------------------------------------------------------
+      ctx.save();
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.rect(0, 0, width, height);
+      addArenaSubpath();
+      ctx.fill('evenodd');
       ctx.restore();
 
       // -------------------------------------------------------------
@@ -866,32 +892,6 @@ export default function TitleBackgroundBattle() {
       ctx.fillStyle = '#475569';
       ctx.fillRect(4 * scale, -2 * scale, 6 * scale, 4 * scale);
       ctx.restore();
-
-      // -------------------------------------------------------------
-      // TETHER / REDIRECTION LASSO LINE
-      // -------------------------------------------------------------
-      ctx.save();
-      const tetherTargetX = arenaX + arenaW * 0.7;
-      const tetherTargetY = arenaY + arenaH * 0.35;
-      ctx.strokeStyle = 'rgba(34, 211, 238, 0.7)';
-      ctx.lineWidth = 2.5 * scale;
-      ctx.setLineDash([8 * scale, 4 * scale]);
-      ctx.lineDashOffset = -Date.now() * 0.08;
-      ctx.beginPath();
-      ctx.moveTo(player.x, player.y);
-      ctx.lineTo(tetherTargetX, tetherTargetY);
-      ctx.stroke();
-
-      // Tether Cursor Anchor Reticle
-      ctx.translate(tetherTargetX, tetherTargetY);
-      ctx.rotate(timeSec * 2);
-      ctx.strokeStyle = '#22d3ee';
-      ctx.lineWidth = 1.2 * scale;
-      ctx.beginPath();
-      ctx.arc(0, 0, 12 * scale, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-
       // -------------------------------------------------------------
       // BULLET SIMULATION (BOTH ENEMY AND DEFLECTED PLAYER BULLETS)
       // -------------------------------------------------------------

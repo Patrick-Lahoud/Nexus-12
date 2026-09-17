@@ -325,7 +325,7 @@ class BasePolicy implements Policy {
           this.cmd = clampToArena(p.pos.x + cdx * adv + px * 160, p.pos.y + cdy * adv + py * 160, 55);
         }
       } else {
-        // too close — back out, or weave through for brawlers
+        // too close: back out, or weave through for brawlers
         const awayX = p.pos.x - crowd.x;
         const awayY = p.pos.y - crowd.y;
         const awayD = Math.hypot(awayX, awayY) || 1;

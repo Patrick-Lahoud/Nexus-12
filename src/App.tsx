@@ -19,15 +19,16 @@ import { ALL_UPGRADES, EVOLVED_UPGRADES, ULTIMATE_UPGRADES, EVOLVED_ABILITIES, g
 import { WeaponType, AbilityType } from './game/types.ts';
 import { ShopPanel } from './components/UI/ShopPanel.tsx';
 import { UnlockRecommendationModal, type UnlockType } from './components/UI/UnlockRecommendationModal.tsx';
-import ControlShop from './components/UI/ControlShop.tsx';
 import { motion, AnimatePresence } from 'motion/react';
-import { Wrench, Trophy } from 'lucide-react';
+import { Wrench, Trophy, Skull, TriangleAlert } from 'lucide-react';
 import { gameAudio } from './game/audio.ts';
 import SettingsModal from './components/UI/SettingsModal.tsx';
 import Guidebook from './components/UI/Guidebook.tsx';
 import SiteBackgroundGrid from './components/UI/SiteBackgroundGrid.tsx';
 import { SandboxCompendiumModal } from './components/UI/SandboxCompendiumModal.tsx';
 import { unlockAchievement } from './game/achievements';
+import { earnBadge, type Badge } from './game/badges';
+import BadgeEmblem from './components/UI/BadgeEmblem';
 import { useLanguage } from './game/localization';
 import { crazyGames } from './game/crazygames';
 
@@ -47,10 +48,21 @@ interface SurvivalSnapshot {
   mines: any[];
 }
 
+// Persisted quit-to-menu resume point for Survival runs.
+interface ResumeSave {
+  mode: 'OVERDRIVE';
+  snapshot: SurvivalSnapshot;
+  rebuildsLeft: number;
+  savedAt: number;
+}
+
+const RESUME_SAVE_KEY = 'survival_resume_save';
+
 export default function App() {
   const { t } = useLanguage();
   const [isPlaying, setIsPlaying] = useState(false);
   const [achievementToast, setAchievementToast] = useState<{ title: string; reward: string } | null>(null);
+  const [badgeToast, setBadgeToast] = useState<Badge | null>(null);
   const [isSandbox, setIsSandbox] = useState(false);
   const [gameMode, setGameMode] = useState<'SURVIVAL' | 'HARDCORE' | 'SANDBOX' | 'OVERDRIVE' | 'OVERDRIVE_SANDBOX'>('SURVIVAL');
   const [isGameOver, setIsGameOver] = useState(false);
@@ -59,12 +71,12 @@ export default function App() {
   const retroTheme = false;
   const [room, setRoom] = useState(1);
   const [showShop, setShowShop] = useState(false);
-  const [showControlShop, setShowControlShop] = useState(false);
   const [showCompendium, setShowCompendium] = useState(false);
   const [showGuidebook, setShowGuidebook] = useState(false);
   const [showSandboxModal, setShowSandboxModal] = useState(false);
   const [unlockModalType, setUnlockModalType] = useState<UnlockType | null>(null);
   const [shopDefaultTab, setShopDefaultTab] = useState<'STATS' | 'DEFENSE' | 'MINING'>('STATS');
+  const seenSkillsUnlockRef = useRef(false);
   const seenDefenseUnlockRef = useRef(false);
   const seenMiningUnlockRef = useRef(false);
   const [availableUpgrades, setAvailableUpgrades] = useState<Upgrade[]>([]);
@@ -80,6 +92,19 @@ export default function App() {
   // Survival (OVERDRIVE) rebuild economy: 3 rebuilds per run, each restoring the last boss-clear checkpoint.
   const [rebuildsLeft, setRebuildsLeft] = useState(0);
   const survivalCheckpointRef = useRef<SurvivalSnapshot | null>(null);
+  const [showGiveUpConfirm, setShowGiveUpConfirm] = useState(false);
+  // Hull value recorded the moment each level starts (used for the quit-to-menu resume save).
+  const roomStartHpRef = useRef(300);
+  const [resumeSave, setResumeSave] = useState<ResumeSave | null>(() => {
+    try {
+      const raw = localStorage.getItem(RESUME_SAVE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as ResumeSave;
+      return parsed && parsed.snapshot && parsed.snapshot.room ? parsed : null;
+    } catch {
+      return null;
+    }
+  });
 
   // Initialize CrazyGames SDK on mount and sync cloud save data
   useEffect(() => {
@@ -93,13 +118,13 @@ export default function App() {
 
   // Sync gameplay state with CrazyGames SDK
   useEffect(() => {
-    const isActivelyPlaying = isPlaying && !showUpgrade && !isGameOver && !showShop && !showControlShop && !showCompendium && !showSettings && !showGuidebook && !showSandboxModal;
+    const isActivelyPlaying = isPlaying && !showUpgrade && !isGameOver && !showShop && !showCompendium && !showSettings && !showGuidebook && !showSandboxModal;
     if (isActivelyPlaying) {
       crazyGames.gameplayStart();
     } else {
       crazyGames.gameplayStop();
     }
-  }, [isPlaying, showUpgrade, isGameOver, showShop, showControlShop, showCompendium, showSettings, showGuidebook, showSandboxModal]);
+  }, [isPlaying, showUpgrade, isGameOver, showShop, showCompendium, showSettings, showGuidebook, showSandboxModal]);
 
   // Engine is stable across renders
   const engine = useMemo(() => new GameEngine(ENGINE_WIDTH, ENGINE_HEIGHT), []);
@@ -110,7 +135,6 @@ export default function App() {
   const showUpgradeRef = useRef(false);
   const isGameOverRef = useRef(false);
   const showShopRef = useRef(false);
-  const showControlShopRef = useRef(false);
   const showCompendiumRef = useRef(false);
   const showSettingsRef = useRef(false);
   const showGuidebookRef = useRef(false);
@@ -123,7 +147,6 @@ export default function App() {
     showUpgradeRef.current = showUpgrade;
     isGameOverRef.current = isGameOver;
     showShopRef.current = showShop;
-    showControlShopRef.current = showControlShop;
     showCompendiumRef.current = showCompendium;
     showSettingsRef.current = showSettings;
     showGuidebookRef.current = showGuidebook;
@@ -131,8 +154,22 @@ export default function App() {
     isSandboxRef.current = isSandbox;
     statPickCountsRef.current = statPickCounts;
 
-    engine.isPaused = !isPlaying || showUpgrade || isGameOver || showShop || showControlShop || showCompendium || showSettings || showGuidebook || Boolean(unlockModalType) || showSandboxModal;
-  }, [engine, isPlaying, showUpgrade, isGameOver, showShop, showControlShop, showCompendium, showSettings, showGuidebook, unlockModalType, isSandbox, statPickCounts, showSandboxModal]);
+    engine.isPaused = !isPlaying || showUpgrade || isGameOver || showShop || showCompendium || showSettings || showGuidebook || Boolean(unlockModalType) || showSandboxModal || quitConfirmOpenRef.current;
+  }, [engine, isPlaying, showUpgrade, isGameOver, showShop, showCompendium, showSettings, showGuidebook, unlockModalType, isSandbox, statPickCounts, showSandboxModal]);
+
+  // The HUD's quit confirmation pauses the game through this flag + event while open.
+  const quitConfirmOpenRef = useRef(false);
+  useEffect(() => {
+    const handlePauseRequest = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail.paused === 'boolean') {
+        quitConfirmOpenRef.current = detail.paused;
+        engine.isPaused = detail.paused || !isPlayingRef.current;
+      }
+    };
+    window.addEventListener('game_pause_request', handlePauseRequest);
+    return () => window.removeEventListener('game_pause_request', handlePauseRequest);
+  }, [engine]);
 
   const lastHp = useRef(300);
 
@@ -148,12 +185,36 @@ export default function App() {
   }, [engine]);
 
   const startRoom = useCallback((roomNum: number) => {
+    // Record the hull value as the level begins: the quit-to-menu resume point restores this exact state.
+    roomStartHpRef.current = engine.player.hp;
+    // Full plane clear: leaving a room removes EVERYTHING from the previous level
+    // (enemies, projectiles, hazards, leftover boss, etc.) before the new one spawns.
+    engine.enemies = [];
+    engine.spawnQueue = [];
+    engine.waveQueue = [];
+    engine.bombs = [];
+    engine.pendingBombs = [];
+    engine.clones = [];
+    engine.warpZones = [];
+    engine.ionZones = [];
+    engine.floatingTexts = [];
+    engine.activeControlFields = [];
     engine.projectiles = [];
     engine.particles = [];
 
-    // Ensure Skills / Control menu is unlocked for Sandbox
+    // Ensure Skills / Defense / Mining are all unlocked for Sandbox
     if (engine.gameMode?.includes('SANDBOX')) {
       engine.player.stats.isControlUnlocked = true;
+      engine.player.stats.isTurretsUnlocked = true;
+      engine.player.stats.isMinesUnlocked = true;
+      // Grant the free pull and auto-equip it to left click
+      if (!engine.player.stats.ownedControls) engine.player.stats.ownedControls = [];
+      if (!engine.player.stats.ownedControls.some(c => c.id === 'redirection_pull')) {
+        engine.player.stats.ownedControls.push({ id: 'redirection_pull', level: 1 });
+      }
+      if (!engine.player.stats.leftClickSlot) {
+        engine.player.stats.leftClickSlot = 'redirection_pull';
+      }
     }
     
     if (roomNum > 0 && roomNum % 10 === 0) {
@@ -164,7 +225,8 @@ export default function App() {
         // Scaling to enemies with steeper curve past level 20
         let enemyCount = 2 + Math.floor(roomNum / 1.5) + Math.floor(Math.pow(roomNum / 10, 1.8) * 3);
         if (roomNum > 20 && roomNum <= 40) {
-            enemyCount = Math.floor(enemyCount * (1 + (roomNum - 20) * 0.08) + Math.pow(roomNum - 20, 1.3));
+            // Sector 31-40 eased: gentler per-room ramp and an overall ~15% trim so this band isn't a wall
+            enemyCount = Math.floor((enemyCount * (1 + (roomNum - 20) * 0.06) + Math.pow(roomNum - 20, 1.2)) * 0.85);
         } else if (roomNum > 40) {
             // Past room 40: dramatically lower enemy quantity as requested
             // Spawn fewer, formidable high-health enemies (12-25 enemies across 2-3 focused waves)
@@ -182,6 +244,9 @@ export default function App() {
   }, [engine]);
 
   const handleStart = (mode: 'SURVIVAL' | 'HARDCORE' | 'SANDBOX' | 'OVERDRIVE' | 'OVERDRIVE_SANDBOX' = 'SURVIVAL', startLevelNum: number = 1) => {
+    // A fresh run clears any saved resume point.
+    localStorage.removeItem(RESUME_SAVE_KEY);
+    setResumeSave(null);
     gameAudio.playMusic('gameplay');
     const isSandboxMode = mode === 'SANDBOX' || mode === 'OVERDRIVE_SANDBOX';
     setIsPlaying(true);
@@ -275,10 +340,10 @@ export default function App() {
       angle: m.angle || 0
     }));
 
-  const buildSurvivalSnapshot = (roomNum: number): SurvivalSnapshot => ({
+  const buildSurvivalSnapshot = (roomNum: number, hpOverride?: number): SurvivalSnapshot => ({
     room: roomNum,
     maxHp: engine.player.maxHp,
-    hp: engine.player.maxHp, // Rebuilds restore a full hull at the sector start
+    hp: hpOverride ?? engine.player.maxHp, // Checkpoints restore a full hull; the quit-resume uses the actual level-start hull
     stats: JSON.parse(JSON.stringify(engine.player.stats)),
     statPickCounts: { ...statPickCounts },
     weapons: engine.player.weapons.map(w => ({ ...w })),
@@ -340,15 +405,22 @@ export default function App() {
     if (snap.stats) {
       engine.player.stats = { ...engine.player.stats, ...snap.stats };
     }
-    if (snap.room >= 10 || snap.stats?.isControlUnlocked) {
+    // Unlock gates are boss-clear level milestones: SKILLS @20, DEFENSE @30, MINING @40.
+    if (snap.room >= 20 || snap.stats?.isControlUnlocked) {
       engine.player.stats.isControlUnlocked = true;
     }
-    if (snap.room >= 20 || snap.stats?.isTurretsUnlocked) {
+    if (snap.room >= 30 || snap.stats?.isTurretsUnlocked) {
       engine.player.stats.isTurretsUnlocked = true;
     }
-    if (snap.room >= 30 || snap.stats?.isMinesUnlocked) {
+    if (snap.room >= 40 || snap.stats?.isMinesUnlocked) {
       engine.player.stats.isMinesUnlocked = true;
     }
+    // Re-arm the unlock gates to match the restored stats. A rebuild to a checkpoint
+    // that predates a milestone (e.g. room 11) reverts the unlocks, so the "seen"
+    // flags must clear too or the milestone boss on the way back up never re-unlocks.
+    seenSkillsUnlockRef.current = Boolean(engine.player.stats.isControlUnlocked || (engine.player.stats.ownedControls && engine.player.stats.ownedControls.length > 0));
+    seenDefenseUnlockRef.current = Boolean(engine.player.stats.isTurretsUnlocked);
+    seenMiningUnlockRef.current = Boolean(engine.player.stats.isMinesUnlocked);
     if (snap.weapons && Array.isArray(snap.weapons)) {
       engine.player.weapons = snap.weapons.map((w: any) => ({ ...w }));
     }
@@ -367,6 +439,30 @@ export default function App() {
     setRebuildsLeft(prev => Math.max(0, prev - 1));
     applySurvivalSnapshot(snap);
   };
+
+  // Resumes a persisted Survival run from its saved resume point (the start of the level you quit from).
+  const handleResume = useCallback(() => {
+    const raw = localStorage.getItem(RESUME_SAVE_KEY);
+    if (!raw) return;
+    try {
+      const save = JSON.parse(raw) as ResumeSave;
+      if (!save || !save.snapshot || !save.snapshot.room) return;
+      setResumeSave(save);
+      setGameMode('OVERDRIVE');
+      setIsSandbox(false);
+      setHasRevivedThisRun(false);
+      setShowGiveUpConfirm(false);
+      setRebuildsLeft(typeof save.rebuildsLeft === 'number' ? save.rebuildsLeft : 3);
+      // The resume save IS the level-start restart point: respawning from it must restore it exactly.
+      survivalCheckpointRef.current = save.snapshot;
+      engine.gameMode = 'OVERDRIVE';
+      applySurvivalSnapshot(save.snapshot);
+    } catch (e) {
+      console.error('Failed to resume run:', e);
+      localStorage.removeItem(RESUME_SAVE_KEY);
+      setResumeSave(null);
+    }
+  }, [engine, applySurvivalSnapshot]);
 
   const checkAndUnlockAchievements = useCallback((currentRoom: number) => {
     if (isSandbox) return;
@@ -411,7 +507,7 @@ export default function App() {
         const nextNoDmg = noDmgRooms + 1;
         crazyGames.setItem('consecutive_no_damage_campaign', nextNoDmg.toString());
         if (nextNoDmg >= 5) {
-          triggerUnlock('camp_nodmg', 'Immortal Core', 'Amethyst Energy Aura');
+          triggerUnlock('camp_nodmg', 'Immortal Core', 'Amethyst Crystal Skin');
         }
       } else {
         crazyGames.setItem('consecutive_no_damage_campaign', '0');
@@ -419,7 +515,7 @@ export default function App() {
 
       // 7. Have 5 or more active weapons equipped in Campaign
       if (engine.player.weapons.length >= 5) {
-        triggerUnlock('camp_synergy', 'Perfect Synergy', 'Overcharged Sparks Aura');
+        triggerUnlock('camp_synergy', 'Perfect Synergy', 'Overcharged Core Skin');
       }
 
       // 8. Have both Bomb Launcher and Plasma Razor active
@@ -432,6 +528,11 @@ export default function App() {
       if (frozenEnemies >= 10) {
         triggerUnlock('camp_chrono', 'Chronoshift Overload', 'Chrono Glow Skin');
       }
+
+      // 10. Defeat Room 50 boss in Hardcore
+      if (currentRoom >= 50) {
+        triggerUnlock('hard_sentinel', 'Void Sentinel Slayer', 'Void Eclipse Skin');
+      }
     } else if (gameMode === 'SURVIVAL' || gameMode === 'OVERDRIVE') {
       // Survival achievements
       // 1. Reach Room 15
@@ -440,7 +541,7 @@ export default function App() {
       }
       // 2. Reach Room 35
       if (currentRoom >= 35) {
-        triggerUnlock('surv_room35', 'Infinite Warrior', 'Solar Flare Aura');
+        triggerUnlock('surv_room35', 'Infinite Warrior', 'Solar Flare Skin');
       }
       // 3. Reach Room 60
       if (currentRoom >= 60) {
@@ -478,6 +579,21 @@ export default function App() {
       if (hasOverdrive && engine.enemiesKilled >= 25) {
         triggerUnlock('surv_overdrive', 'Absolute Overload', 'Deep Purple Obsidian Skin');
       }
+
+      // 9. Clear Room 30 (Phantom Ace) in Survival
+      if (currentRoom >= 30) {
+        triggerUnlock('surv_phantom', 'Phantom Slayer', 'Phantom Split Skin');
+      }
+
+      // 10. Kill 1,500 enemies in one Survival run
+      if (engine.enemiesKilled >= 1500) {
+        triggerUnlock('surv_exterminator', 'Exterminator', 'Toxic Green Skin');
+      }
+
+      // 11. Reach Room 100 in Survival
+      if (currentRoom >= 100) {
+        triggerUnlock('surv_cryo', 'Cryo Conqueror', 'Frostbite Skin');
+      }
     }
   }, [gameMode, isSandbox, engine]);
 
@@ -488,6 +604,14 @@ export default function App() {
     const isBossRoom = room > 0 && room % 10 === 0;
     if (isBossRoom) {
       crazyGames.happytime();
+      // Milestone badges: one per boss (10..100), tracked per mode
+      if (!isSandbox && (gameMode === 'OVERDRIVE' || gameMode === 'HARDCORE')) {
+        const earned = earnBadge(gameMode, room);
+        if (earned) {
+          setBadgeToast(earned);
+          setTimeout(() => setBadgeToast(null), 4000);
+        }
+      }
     }
 
     // Evaluate achievements on room clear
@@ -527,30 +651,73 @@ export default function App() {
     }
   }, [room, isSandbox, isPlaying, gameMode]);
 
-  // Check for recommended unlock pop-ups on round milestone thresholds after boss fights
+  // Unlock gates are boss-clear level milestones, not money:
+  //   SKILLS  -> level 20 (boss room 20)
+  //   DEFENSE -> level 30 (boss room 30)
+  //   MINING  -> level 40 (boss room 40)
+  // The popup fires once, right after the boss clear that reaches the milestone.
   useEffect(() => {
     if (!isPlaying || isGameOver) return;
+    if (unlockModalType) return;
 
     const isTurretsUnlocked = engine.player.stats.isTurretsUnlocked;
     const isMinesUnlocked = engine.player.stats.isMinesUnlocked;
     const hasBoughtSkills = Boolean(engine.player.stats.isControlUnlocked || (engine.player.stats.ownedControls && engine.player.stats.ownedControls.length > 0));
 
-    // Show Defense Grid ready pop-up as soon as player has enough money (10,000 Cr) - no round lock
-    const canAffordDefense = engine.player.stats.currency >= 10000 || isSandbox;
-    const canAffordMining = engine.player.stats.currency >= 50000 || isSandbox;
-
-    if (!isTurretsUnlocked && canAffordDefense && !seenDefenseUnlockRef.current && !unlockModalType) {
+    if (!hasBoughtSkills && room >= 20 && !seenSkillsUnlockRef.current) {
+      seenSkillsUnlockRef.current = true;
+      // Auto-unlock: reaching the milestone level IS the unlock (no manual button)
+      engine.player.stats.isControlUnlocked = true;
+      if (!engine.player.stats.ownedControls) engine.player.stats.ownedControls = [];
+      if (!engine.player.stats.ownedControls.some(c => c.id === 'redirection_pull')) {
+        engine.player.stats.ownedControls.push({ id: 'redirection_pull', level: 1 });
+      }
+      // The free pull is auto-equipped to left click
+      if (!engine.player.stats.leftClickSlot) {
+        engine.player.stats.leftClickSlot = 'redirection_pull';
+      }
+      setUnlockModalType('SKILLS');
+    } else if (!isTurretsUnlocked && room >= 30 && !seenDefenseUnlockRef.current) {
       seenDefenseUnlockRef.current = true;
+      engine.player.stats.isTurretsUnlocked = true;
       setUnlockModalType('DEFENSE');
-    }
-    // Show Mining pop-up as soon as player has enough money (50,000 Cr) - no round lock
-    else if (!isMinesUnlocked && canAffordMining && !seenMiningUnlockRef.current && !unlockModalType) {
+    } else if (!isMinesUnlocked && room >= 40 && !seenMiningUnlockRef.current) {
       seenMiningUnlockRef.current = true;
+      engine.player.stats.isMinesUnlocked = true;
       setUnlockModalType('MINING');
     }
-  }, [room, engine.player.stats.currency, engine.player.stats.isTurretsUnlocked, engine.player.stats.isMinesUnlocked, engine.player.stats.isControlUnlocked, engine.player.stats.ownedControls, isPlaying, isGameOver, isSandbox, unlockModalType]);
+  }, [room, engine.player.stats.isTurretsUnlocked, engine.player.stats.isMinesUnlocked, engine.player.stats.isControlUnlocked, engine.player.stats.ownedControls, isPlaying, isGameOver, isSandbox, unlockModalType]);
 
   const handleQuitToMenu = useCallback(() => {
+    // Persist a resume point for Survival runs before tearing down:
+    //  - alive: the exact state from the start of the current level (loadout + level-start hull)
+    //  - dead (game over): the latest checkpoint restart, so quitting returns you to a restart
+    let saved: ResumeSave | null = null;
+    if (gameMode === 'OVERDRIVE') {
+      if (!isGameOver) {
+        saved = {
+          mode: 'OVERDRIVE',
+          snapshot: buildSurvivalSnapshot(room, roomStartHpRef.current),
+          rebuildsLeft,
+          savedAt: Date.now()
+        };
+      } else if (survivalCheckpointRef.current) {
+        saved = {
+          mode: 'OVERDRIVE',
+          snapshot: survivalCheckpointRef.current,
+          rebuildsLeft,
+          savedAt: Date.now()
+        };
+      }
+    }
+    if (saved) {
+      localStorage.setItem(RESUME_SAVE_KEY, JSON.stringify(saved));
+      setResumeSave(saved);
+    } else {
+      localStorage.removeItem(RESUME_SAVE_KEY);
+      setResumeSave(null);
+    }
+
     gameAudio.playMusic('menu');
     setIsPlaying(false);
     setIsGameOver(false);
@@ -561,6 +728,7 @@ export default function App() {
     setShopDefaultTab('STATS');
     setShowCompendium(false);
     setRoom(1);
+    seenSkillsUnlockRef.current = false;
     seenDefenseUnlockRef.current = false;
     seenMiningUnlockRef.current = false;
     setUnlockModalType(null);
@@ -575,7 +743,7 @@ export default function App() {
     (engine as any).mines = [];
     engine.spawnQueue = [];
     engine.waveQueue = [];
-  }, [engine]);
+  }, [engine, gameMode, isGameOver, room, rebuildsLeft, buildSurvivalSnapshot]);
 
   const onGameOver = useCallback(() => {
     gameAudio.stopMusic();
@@ -619,7 +787,8 @@ export default function App() {
         });
       }
       if (e.key === 'p' || e.key === 'P') {
-        setShowControlShop(prev => !prev);
+        setShowShop(true);
+        setShopDefaultTab('SKILLS');
       }
       if (e.key === 'c' || e.key === 'C') setShowCompendium(prev => !prev);
       if (e.key === 'g' || e.key === 'G' || e.key === 'h' || e.key === 'H') setShowGuidebook(prev => !prev);
@@ -700,12 +869,11 @@ export default function App() {
   const advanceRoom = (nextRoom: number) => {
     setRoom(nextRoom);
     startRoom(nextRoom);
-
     if (gameMode?.includes('SANDBOX')) {
       engine.player.stats.isControlUnlocked = true;
     }
 
-    // Survival (OVERDRIVE) checkpoints: captured at each sector start — the run's opening room (2) and
+    // Survival (OVERDRIVE) checkpoints: captured at each sector start: the run's opening room (2) and
     // every room right after a boss clear (11, 21, 31…). A rebuild drops you back here with the exact
     // loadout you carried into the sector (post-boss-clear upgrade pick included), at full hull.
     const isSectorStart = nextRoom === 2 || (nextRoom > 1 && (nextRoom - 1) % 10 === 0);
@@ -1215,17 +1383,18 @@ export default function App() {
   };
 
   return (
-    <div className={`w-full h-screen text-white flex items-center justify-center p-4 transition-colors duration-500 relative overflow-hidden space-site-bg ${retroTheme ? 'bg-[#040406]' : 'bg-[#030308]'}`}>
+    <div className={`w-full h-screen text-white flex items-center justify-center p-4 transition-colors duration-500 relative overflow-hidden bg-black`} >
       <SiteBackgroundGrid />
-      <div className={`relative z-10 w-full max-w-[1360px] h-full max-h-[820px] flex flex-col p-6 overflow-hidden transition-all duration-300 ${
+      <div className={`relative z-10 w-full max-w-[1360px] h-full max-h-[820px] flex flex-col overflow-hidden transition-all duration-300 ${
         retroTheme 
-          ? 'retro-theme-active font-retro border-8 border-zinc-900 bg-[#060608]' 
-          : 'font-sans border-8 border-double border-zinc-800/80 bg-[#06060c]/90 backdrop-blur-sm'
+          ? 'retro-theme-active font-retro bg-[#060608]' 
+          : 'font-sans bg-black'
       }`}>
+        
         
         <AnimatePresence>
           {!isPlaying && !isGameOver && (
-            <TitleScreen onStart={handleStart} highestRoom={highestRoom} onShowSettings={() => setShowSettings(true)} />
+            <TitleScreen onStart={handleStart} highestRoom={highestRoom} onShowSettings={() => setShowSettings(true)} resumeRoom={resumeSave?.snapshot.room ?? null} onResume={handleResume} />
           )}
         </AnimatePresence>
 
@@ -1254,11 +1423,9 @@ export default function App() {
             />
             
             <div className="flex-1 flex gap-6 min-h-0 overflow-hidden relative">
-              {/* Arena Container */}
-              <div id="arena-container" className={`relative flex-1 rounded-2xl border-2 transition-colors duration-1000 overflow-hidden bg-zinc-950 ${room % 10 === 0 ? 'border-red-600/80 shadow-[0_0_20px_rgba(220,38,38,0.2)]' : 'border-zinc-800/80'}`}>
-                <GameCanvas engine={engine} isPaused={showUpgrade || isGameOver || showShop || showCompendium || showSettings || showGuidebook || Boolean(unlockModalType) || showSandboxModal} room={room} />
-                
-                {/* Boss Health Bar React Overlay */}
+              {/* Arena column: boss bar sits above the game frame so it never covers gameplay */}
+              <div className="flex-1 flex flex-col min-h-0 relative">
+                {/* Boss Health Bar (above the arena frame) */}
                 {(() => {
                   const activeBoss = engine.enemies.find(e => e.isBoss && !e.isDead);
                   if (!activeBoss) return null;
@@ -1266,7 +1433,7 @@ export default function App() {
                   const shieldPct = (activeBoss.shieldHp && activeBoss.shieldHp > 0 && activeBoss.maxShieldHp) 
                     ? (activeBoss.shieldHp / activeBoss.maxShieldHp) * 100 : 0;
                   return (
-                    <div id="boss-health-bar-container" className="absolute top-3 left-1/2 -translate-x-1/2 z-30 max-w-xl w-[92%] bg-zinc-950/90 border border-red-500/40 p-2.5 rounded-xl shadow-[0_0_20px_rgba(239,68,68,0.25)] flex flex-col gap-1.5 select-none pointer-events-none backdrop-blur-md animate-in fade-in duration-300">
+                    <div id="boss-health-bar-container" className="max-w-xl w-[92%] mx-auto mb-2 z-30 bg-zinc-950/90 border border-red-500/40 p-2.5 rounded-xl shadow-[0_0_20px_rgba(239,68,68,0.25)] flex flex-col gap-1.5 select-none pointer-events-none backdrop-blur-md animate-in fade-in duration-300">
                       <div className="flex justify-between items-center text-[11px] font-black uppercase tracking-wider">
                         <span className="text-white flex items-center gap-1.5 font-sans">
                           <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
@@ -1302,8 +1469,12 @@ export default function App() {
                   );
                 })()}
 
-                {/* Real-time Rate Indicators: DPS & Mining CPS */}
-                <div className="absolute bottom-4 left-4 z-20 flex flex-row gap-2 select-none">
+                {/* Arena Container */}
+                <div id="arena-container" className={`relative flex-1 overflow-hidden transition-colors duration-1000 ${retroTheme ? 'bg-[#030306]' : 'bg-black'} ${room % 10 === 0 ? 'shadow-[0_0_25px_rgba(220,38,38,0.25)]' : ''}`}>
+                  <GameCanvas engine={engine} isPaused={showUpgrade || isGameOver || showShop || showCompendium || showSettings || showGuidebook || Boolean(unlockModalType) || showSandboxModal} room={room} />
+                  
+                  {/* Real-time Rate Indicators: DPS & Mining CPS */}
+                  <div className="absolute bottom-4 left-4 z-20 flex flex-row gap-2 select-none">
                   {/* DPS Counter Overlay */}
                   <div id="dps-counter" className="bg-zinc-950/80 border border-zinc-850 px-3 py-1.5 rounded-lg text-xs font-bold font-mono flex items-center gap-2 text-cyan-400 border-cyan-500/10 shadow-[0_0_12px_rgba(34,211,238,0.1)]">
                     <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse inline-block shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
@@ -1318,10 +1489,11 @@ export default function App() {
                     </div>
                   )}
                 </div>
+                </div>
               </div>
 
               {/* Sidebar */}
-              <SidebarStats engine={engine} room={room} onOpenControlShop={() => setShowControlShop(prev => !prev)} />
+              <SidebarStats engine={engine} room={room} />
             </div>
 
             <ShopPanel 
@@ -1334,21 +1506,16 @@ export default function App() {
                 isSandbox={isSandbox} 
                 onUpdate={() => setTick(t => t + 1)}
                 defaultTab={shopDefaultTab}
+                room={room}
             />
 
             <UnlockRecommendationModal
                 isOpen={Boolean(unlockModalType)}
                 type={unlockModalType}
-                room={room}
-                currency={engine.player.stats.currency || 0}
                 isSandbox={isSandbox}
                 onOpenShopTab={(tab) => {
-                  if (tab === 'SKILLS') {
-                    setShowControlShop(true);
-                  } else {
-                    setShopDefaultTab(tab);
-                    setShowShop(true);
-                  }
+                  setShopDefaultTab(tab);
+                  setShowShop(true);
                 }}
                 onClose={() => setUnlockModalType(null)}
             />
@@ -1360,14 +1527,6 @@ export default function App() {
                   setShowCompendium(true);
                 }}
                 onClose={() => setShowSandboxModal(false)}
-            />
-
-            <ControlShop
-                engine={engine}
-                isOpen={showControlShop}
-                onClose={() => setShowControlShop(false)}
-                isSandbox={isSandbox}
-                onUpdate={() => setTick(t => t + 1)}
             />
 
             <AnimatePresence>
@@ -1413,72 +1572,188 @@ export default function App() {
         )}
 
         <AnimatePresence>
-          {isGameOver && (
-            <motion.div 
+          {isGameOver && (() => {
+            const isFinalDeath = gameMode !== 'OVERDRIVE' || rebuildsLeft <= 0;
+            return (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md select-none"
+              >
+                {/* Red death flash */}
+                <motion.div
+                  initial={{ opacity: isFinalDeath ? 0.7 : 0.45 }}
+                  animate={{ opacity: 0 }}
+                  transition={{ duration: 0.8, ease: 'easeOut' }}
+                  className="absolute inset-0 pointer-events-none bg-red-600/25"
+                />
+                {/* Shockwave rings */}
+                {[0, 0.15, 0.3].map((delay, i) => (
+                  <motion.div
+                    key={`ring-${i}`}
+                    initial={{ scale: 0.1, opacity: 0.8 }}
+                    animate={{ scale: 3.2, opacity: 0 }}
+                    transition={{ duration: 0.9, delay, ease: 'easeOut' }}
+                    className={`absolute left-1/2 top-1/2 w-64 h-64 -ml-32 -mt-32 rounded-full pointer-events-none border-2 ${
+                      isFinalDeath ? 'border-red-500' : 'border-red-500/70'
+                    }`}
+                  />
+                ))}
+                {/* Vignette for final death */}
+                {isFinalDeath && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: [0, 0.6, 0.35] }}
+                    transition={{ duration: 1.4, ease: 'easeOut' }}
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ background: 'radial-gradient(ellipse at center, transparent 30%, rgba(127,29,29,0.5) 100%)' }}
+                  />
+                )}
+                <motion.div
+                  initial={{ opacity: 0, scale: isFinalDeath ? 0.6 : 1.15, y: isFinalDeath ? 0 : 24 }}
+                  animate={{
+                    opacity: 1,
+                    scale: isFinalDeath ? [0.6, 1.08, 1] : 1,
+                    y: 0,
+                    x: isFinalDeath ? [0, -12, 12, -8, 8, -4, 4, 0] : 0,
+                  }}
+                  transition={isFinalDeath
+                    ? { duration: 0.45, ease: 'easeOut' }
+                    : { duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                  className="relative w-full max-w-md space-ui-bg border-2 border-red-500/40 rounded-2xl shadow-[0_0_60px_rgba(239,68,68,0.3)] flex flex-col overflow-hidden"
+                >
+
+                  {/* Header */}
+                  <div className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 bg-zinc-950/80">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-red-950/60 border border-red-500/40 rounded-xl text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]">
+                        <Skull size={24} />
+                      </div>
+                      <motion.h2
+                        initial={{ opacity: 0, x: -6 }}
+                        animate={{ opacity: [0, 1, 0.3, 1, 0.5, 1], x: [-6, 3, -2, 0] }}
+                        transition={{ duration: 0.7, delay: 0.2 }}
+                        className="text-3xl sm:text-4xl font-black italic uppercase leading-none tracking-tight text-white"
+                      >
+                        {t('game_over', {}, 'Hull Destroyed')}
+                      </motion.h2>
+                      {isFinalDeath && (
+                        <span className="px-2 py-0.5 text-xs bg-red-950/80 text-red-300 border border-red-500/40 rounded font-mono font-black uppercase tracking-wider">
+                          {t('final_death_tag', {}, 'No Rebuilds Left')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Body */}
+                  <div className="relative z-10 p-6 flex flex-col items-center gap-5">
+                    <div className="w-full bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-5 text-center">
+                      <div className="text-[10px] text-zinc-500 uppercase font-mono mb-2">{t('final_performance', {}, 'Final Performance')}</div>
+                      <div className="text-3xl sm:text-4xl font-black italic uppercase leading-none tracking-tight text-white">{t('room_label')} {room}</div>
+                      <div className="text-xs text-zinc-400 font-mono uppercase mt-2">
+                        {t('highest_room_record', {}, 'Highest Room')}: {Math.max(highestRoom || 1, room)}
+                      </div>
+                      {gameMode === 'OVERDRIVE' && rebuildsLeft > 0 && (
+                        <div className="text-sm font-black uppercase tracking-wide text-emerald-400 mt-2">
+                          {t('rebuilds_left', {}, 'Rebuilds Left')}: {rebuildsLeft}
+                          {survivalCheckpointRef.current && <> &middot; {t('checkpoint_room', {}, 'Checkpoint')}: {t('room_label')} {survivalCheckpointRef.current.room}</>}
+                        </div>
+                      )}
+                      {gameMode === 'HARDCORE' && (
+                        <div className="text-sm font-black uppercase tracking-wide text-red-400 mt-2">
+                          {t('hardcore_no_mercy', {}, 'Hardcore Protocol · No Checkpoints · No Rebuilds')}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+                      {(() => {
+                        const snap = survivalCheckpointRef.current;
+                        const canRebuild = gameMode === 'OVERDRIVE' && rebuildsLeft > 0 && !!snap;
+                        return (
+                          <>
+                            {canRebuild && (
+                              <motion.button 
+                                whileHover={{ scale: 1.04 }}
+                                whileTap={{ scale: 0.96 }}
+                                onClick={handleRebuild}
+                                className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 border-2 border-emerald-400 text-white font-mono font-black uppercase tracking-wider rounded-xl text-xs transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] cursor-pointer"
+                              >
+                                {t('rebuild_label', {}, 'REBUILD')}
+                              </motion.button>
+                            )}
+                            {canRebuild ? (
+                              <motion.button 
+                                whileHover={{ scale: 1.04 }}
+                                whileTap={{ scale: 0.96 }}
+                                onClick={() => { gameAudio.playButtonClickSound(); setShowGiveUpConfirm(true); }}
+                                className="px-8 py-3 bg-zinc-900 hover:bg-red-600 border-2 border-zinc-700 hover:border-red-400 text-zinc-300 hover:text-white font-mono font-black uppercase tracking-wider rounded-xl text-xs transition-all cursor-pointer"
+                              >
+                                {t('give_up_label', {}, 'GIVE UP')}
+                              </motion.button>
+                            ) : (
+                              <motion.button 
+                                whileHover={{ scale: 1.04 }}
+                                whileTap={{ scale: 0.96 }}
+                                onClick={() => { gameAudio.playButtonClickSound(); handleQuitToMenu(); }}
+                                className="px-8 py-3 bg-zinc-900 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-white font-mono font-black uppercase tracking-wider rounded-xl text-xs transition-all cursor-pointer"
+                              >
+                                {t('retry_label', {}, 'RETRY')}
+                              </motion.button>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showGiveUpConfirm && (
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="absolute inset-x-6 inset-y-6 bg-red-950/90 backdrop-blur-md flex items-center justify-center p-8 z-[150] rounded-lg"
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/85 backdrop-blur-md"
             >
-              <div className="text-center">
-                <h2 className="text-7xl font-black text-white italic uppercase mb-8">{t('game_over', {}, 'Hull Destroyed')}</h2>
-
-                <div className="bg-zinc-900 border border-zinc-855 p-6 rounded-2xl mb-8 shadow-2xl max-w-sm mx-auto">
-                    <div className="text-[10px] text-zinc-500 uppercase font-mono mb-2">{t('final_performance', {}, 'Final Performance')}</div>
-                    <div className="text-4xl font-mono text-white">{t('room_label')} {room}</div>
-                    <div className="text-xs text-zinc-400 font-mono uppercase mt-2">
-                      {t('highest_room_record', {}, 'Highest Room')}: {Math.max(highestRoom || 1, room)}
-                    </div>
-                    {gameMode === 'OVERDRIVE' && rebuildsLeft > 0 && (
-                      <div className="text-[10px] text-emerald-400 font-mono uppercase mt-2">
-                        {t('rebuilds_left', {}, 'Rebuilds Left')}: {rebuildsLeft}
-                        {survivalCheckpointRef.current && <> &middot; {t('checkpoint_room', {}, 'Checkpoint')}: {t('room_label')} {survivalCheckpointRef.current.room}</>}
-                      </div>
-                    )}
-                    {gameMode === 'HARDCORE' && (
-                      <div className="text-[10px] text-red-400 font-mono uppercase mt-2">
-                        {t('hardcore_no_mercy', {}, 'Hardcore Protocol · No Checkpoints · No Rebuilds')}
-                      </div>
-                    )}
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ duration: 0.15, ease: "easeOut" }}
+                className="relative w-full max-w-sm space-ui-bg border-2 border-red-500/40 rounded-2xl shadow-[0_0_50px_rgba(239,68,68,0.25)] flex flex-col overflow-hidden pointer-events-auto"
+              >
+                <div className="relative z-10 p-6 flex flex-col gap-4 text-center">
+                  <div className="mx-auto p-3 bg-red-950/60 border border-red-500/40 rounded-xl text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.3)]">
+                    <TriangleAlert size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-black italic uppercase text-lg tracking-tight">{t('give_up_confirm_title', {}, 'Give Up?')}</h3>
+                    <p className="text-zinc-400 text-xs mt-2 leading-relaxed">
+                      {t('give_up_confirm_desc', {}, 'You will not use your rebuild and all progress in this run will be lost.')}
+                    </p>
+                  </div>
+                  <div className="flex gap-3 mt-1">
+                    <button
+                      onClick={() => { gameAudio.playButtonClickSound(); setShowGiveUpConfirm(false); }}
+                      className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-mono font-bold text-xs uppercase tracking-wider rounded-xl transition-all border-2 border-zinc-700 cursor-pointer"
+                    >
+                      {t('cancel')}
+                    </button>
+                    <button
+                      onClick={() => { gameAudio.playButtonClickSound(); setShowGiveUpConfirm(false); handleQuitToMenu(); }}
+                      className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white font-mono font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)] cursor-pointer"
+                    >
+                      {t('give_up_confirm_btn', {}, 'GIVE UP')}
+                    </button>
+                  </div>
                 </div>
-
-                <div className="flex flex-col gap-3 justify-center items-center">
-                  {(() => {
-                    const snap = survivalCheckpointRef.current;
-                    const canRebuild = gameMode === 'OVERDRIVE' && rebuildsLeft > 0 && !!snap;
-                    return (
-                      <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                        {canRebuild && (
-                          <motion.button 
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={handleRebuild}
-                            className="bg-emerald-600 border border-emerald-500 text-white px-8 py-4 font-black uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-xl rounded font-mono text-xs cursor-pointer"
-                          >
-                            {t('rebuild_run', { room: snap.room }, 'REBUILD FROM ROOM')} {snap.room}
-                          </motion.button>
-                        )}
-                        <motion.button 
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => handleStart(gameMode)}
-                          className="bg-white text-red-950 px-8 py-4 font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-xl rounded font-mono text-xs cursor-pointer"
-                        >
-                          {t('reinitialize', {}, 'RE-INITIALIZE')}
-                        </motion.button>
-                        
-                        <motion.button 
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={handleQuitToMenu}
-                          className="bg-zinc-900 border border-zinc-800 text-zinc-400 px-8 py-4 font-black uppercase tracking-widest hover:bg-zinc-800 transition-all shadow-xl rounded font-mono text-xs cursor-pointer"
-                        >
-                          {t('quit_to_menu')}
-                        </motion.button>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -1491,7 +1766,26 @@ export default function App() {
 
         <AnimatePresence>
           {showGuidebook && (
-            <Guidebook isOpen={showGuidebook} onClose={() => setShowGuidebook(false)} />
+            <Guidebook isOpen={showGuidebook} onClose={() => setShowGuidebook(false)} isSandbox={isSandbox} />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {badgeToast && (
+            <motion.div
+              initial={{ opacity: 0, y: -50, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.9 }}
+              className="fixed top-6 right-6 z-[1000] bg-[#0a0a14] border-2 rounded-xl p-4 shadow-lg flex items-center gap-4"
+              style={{ borderColor: badgeToast.color, boxShadow: `0 0 30px ${badgeToast.color}55` }}
+            >
+              <BadgeEmblem emblem={badgeToast.emblem} color={badgeToast.color} size={30} jagged={gameMode === 'HARDCORE'} />
+              <div className="flex-1">
+                <h4 className="text-sm font-black text-white uppercase tracking-wide">
+                  {badgeToast.name} <span style={{ color: badgeToast.color }}>{t('unlocked', {}, 'Unlocked')}</span>
+                </h4>
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
 

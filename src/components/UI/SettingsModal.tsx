@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { X, Volume2, Music, Eye, Zap, Activity, Sliders, Contrast, Globe, Sparkles, Flame, Aperture, CircleDot } from 'lucide-react';
+import { X, Volume2, Music, Eye, Activity, Sliders, Contrast, CircleDot } from 'lucide-react';
 import { gameAudio } from '../../game/audio.ts';
 import { useLanguage } from '../../game/localization';
 
@@ -19,16 +19,19 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     return val !== null ? parseFloat(val) : 1.0;
   });
 
-  // 4 Graphics Overdrive Switches
-  const [gfxDynamicGrid, setGfxDynamicGrid] = useState(() => localStorage.getItem('gfx_dynamic_grid') !== 'false');
-  const [gfxNeonLighting, setGfxNeonLighting] = useState(() => localStorage.getItem('gfx_neon_lighting') !== 'false');
-  const [gfxDebrisFx, setGfxDebrisFx] = useState(() => localStorage.getItem('gfx_debris_fx') !== 'false');
-  const [gfxCinematicFx, setGfxCinematicFx] = useState(() => localStorage.getItem('gfx_cinematic_fx') !== 'false');
+  const [soundMuted, setSoundMuted] = useState(() => gameAudio.getMuted());
 
   const retroTheme = false;
 
   useEffect(() => {
     gameAudio.resume();
+    // Graphics & visual engines are always on: clear any stale opt-out flags.
+    ['gfx_dynamic_grid', 'gfx_neon_lighting', 'gfx_debris_fx', 'gfx_cinematic_fx', 'gfx_enemy_detail'].forEach(k => {
+      if (localStorage.getItem(k) === 'false') {
+        localStorage.setItem(k, 'true');
+      }
+    });
+    window.dispatchEvent(new Event('game_settings_updated'));
   }, []);
 
   const handleSfxChange = (val: number) => {
@@ -65,11 +68,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     gameAudio.playButtonClickSound();
   };
 
-  const handleGfxToggle = (key: string, currentVal: boolean, setter: (val: boolean) => void) => {
-    const next = !currentVal;
-    setter(next);
-    localStorage.setItem(key, String(next));
-    window.dispatchEvent(new Event('game_settings_updated'));
+  const handleSoundMuteToggle = () => {
+    const next = !soundMuted;
+    setSoundMuted(next);
+    gameAudio.setMute(next);
     gameAudio.playButtonClickSound();
   };
 
@@ -105,107 +107,38 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         {/* Title */}
         <div className="flex items-center gap-2.5 mb-6 pt-1">
           <Sliders className="w-6 h-6 text-cyan-400" />
-          <h2 className="font-black uppercase tracking-wider text-xl m-0 text-white">
+          <h2 className="not-italic font-mono font-black uppercase tracking-wider text-xl m-0 text-white">
             {t('system_configurations', {}, 'System Configurations')}
           </h2>
         </div>
 
         {/* Settings Sections */}
         <div className="space-y-6 mb-6">
-          
-          {/* Graphics Overdrive Section */}
-          <div>
-            <h3 className="text-xs font-black uppercase tracking-wider mb-3 text-amber-400 flex items-center gap-2">
-              <Sparkles size={16} />
-              {t('graphics_overdrive_engine', {}, 'GRAPHICS & VISUAL ENGINE')}
-            </h3>
-
-            <div className="space-y-2.5">
-              {/* Switch 1: 3D Space & Reactive Grid Engine */}
-              <div className="flex items-center justify-between p-3.5 bg-zinc-950/70 border border-zinc-800/80 rounded-xl hover:border-amber-500/30 transition-all">
-                <div className="flex flex-col text-left pr-3">
-                  <span className="text-xs font-black text-white flex items-center gap-1.5 uppercase tracking-wide">
-                    <Globe size={14} className="text-amber-400" />
-                    {t('gfx_switch_1_title', {}, '1. Dynamic Space & 3D Grid')}
-                  </span>
-                  <span className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
-                    {t('gfx_switch_1_desc', {}, '3D-warping arena grid mesh, parallax cosmic nebulae & radar sweeps')}
-                  </span>
-                </div>
-                <button
-                  onClick={() => handleGfxToggle('gfx_dynamic_grid', gfxDynamicGrid, setGfxDynamicGrid)}
-                  className={`w-12 h-7 rounded-full transition-colors relative cursor-pointer outline-none shrink-0 ${gfxDynamicGrid ? 'bg-amber-500' : 'bg-zinc-800'}`}
-                >
-                  <div className={`w-5 h-5 rounded-full bg-white absolute top-1 transition-all ${gfxDynamicGrid ? 'right-1' : 'left-1'}`} />
-                </button>
-              </div>
-
-              {/* Switch 2: Hyper Neon Lighting & Energy Trails */}
-              <div className="flex items-center justify-between p-3.5 bg-zinc-950/70 border border-zinc-800/80 rounded-xl hover:border-cyan-500/30 transition-all">
-                <div className="flex flex-col text-left pr-3">
-                  <span className="text-xs font-black text-white flex items-center gap-1.5 uppercase tracking-wide">
-                    <Zap size={14} className="text-cyan-400" />
-                    {t('gfx_switch_2_title', {}, '2. Neon Lighting & Energy Trails')}
-                  </span>
-                  <span className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
-                    {t('gfx_switch_2_desc', {}, 'Dynamic point-light casting, liquid plasma ghosting & lightning blooms')}
-                  </span>
-                </div>
-                <button
-                  onClick={() => handleGfxToggle('gfx_neon_lighting', gfxNeonLighting, setGfxNeonLighting)}
-                  className={`w-12 h-7 rounded-full transition-colors relative cursor-pointer outline-none shrink-0 ${gfxNeonLighting ? 'bg-cyan-500' : 'bg-zinc-800'}`}
-                >
-                  <div className={`w-5 h-5 rounded-full bg-white absolute top-1 transition-all ${gfxNeonLighting ? 'right-1' : 'left-1'}`} />
-                </button>
-              </div>
-
-              {/* Switch 3: Impact & Debris Physics */}
-              <div className="flex items-center justify-between p-3.5 bg-zinc-950/70 border border-zinc-800/80 rounded-xl hover:border-orange-500/30 transition-all">
-                <div className="flex flex-col text-left pr-3">
-                  <span className="text-xs font-black text-white flex items-center gap-1.5 uppercase tracking-wide">
-                    <Flame size={14} className="text-orange-400" />
-                    {t('gfx_switch_3_title', {}, '3. Impact & Debris Physics')}
-                  </span>
-                  <span className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
-                    {t('gfx_switch_3_desc', {}, 'Hull fragment wreckage debris, floor shrapnel & explosion shockwaves')}
-                  </span>
-                </div>
-                <button
-                  onClick={() => handleGfxToggle('gfx_debris_fx', gfxDebrisFx, setGfxDebrisFx)}
-                  className={`w-12 h-7 rounded-full transition-colors relative cursor-pointer outline-none shrink-0 ${gfxDebrisFx ? 'bg-orange-500' : 'bg-zinc-800'}`}
-                >
-                  <div className={`w-5 h-5 rounded-full bg-white absolute top-1 transition-all ${gfxDebrisFx ? 'right-1' : 'left-1'}`} />
-                </button>
-              </div>
-
-              {/* Switch 4: Cinematic Post-Processing */}
-              <div className="flex items-center justify-between p-3.5 bg-zinc-950/70 border border-zinc-800/80 rounded-xl hover:border-purple-500/30 transition-all">
-                <div className="flex flex-col text-left pr-3">
-                  <span className="text-xs font-black text-white flex items-center gap-1.5 uppercase tracking-wide">
-                    <Aperture size={14} className="text-purple-400" />
-                    {t('gfx_switch_4_title', {}, '4. Cinematic Post-Processing')}
-                  </span>
-                  <span className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
-                    {t('gfx_switch_4_desc', {}, 'Cockpit vignette shading, RGB chromatic split & micro lens flares')}
-                  </span>
-                </div>
-                <button
-                  onClick={() => handleGfxToggle('gfx_cinematic_fx', gfxCinematicFx, setGfxCinematicFx)}
-                  className={`w-12 h-7 rounded-full transition-colors relative cursor-pointer outline-none shrink-0 ${gfxCinematicFx ? 'bg-purple-500' : 'bg-zinc-800'}`}
-                >
-                  <div className={`w-5 h-5 rounded-full bg-white absolute top-1 transition-all ${gfxCinematicFx ? 'right-1' : 'left-1'}`} />
-                </button>
-              </div>
-            </div>
-          </div>
 
           {/* Audio Console */}
           <div>
             <h3 className="text-xs font-black uppercase tracking-wider mb-3 text-cyan-400 flex items-center gap-2">
               <Volume2 size={16} />
-              {t('audio_master_console', {}, 'AUDIO MASTER CONSOLE')}
+              {t('audio_master_console', {}, 'Audio')}
             </h3>
-            
+
+            {/* Sound On/Off */}
+            <div className="flex items-center justify-between p-3.5 mb-2.5 bg-zinc-950/60 border border-zinc-800/80 rounded-xl">
+              <div className="flex flex-col text-left pr-3">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Volume2 size={14} className="text-cyan-400" />
+                  {t('sound', {}, 'Sound')}
+                </span>
+                <span className="text-[11px] text-zinc-400 mt-0.5">{t('sound_toggle_desc', {}, 'Master audio on and off')}</span>
+              </div>
+              <button
+                onClick={handleSoundMuteToggle}
+                className={`w-12 h-7 rounded-full transition-colors relative cursor-pointer outline-none shrink-0 ${soundMuted ? 'bg-zinc-800' : 'bg-cyan-500'}`}
+              >
+                <div className={`w-5 h-5 rounded-full bg-white absolute top-1 transition-all ${soundMuted ? 'left-1' : 'right-1'}`} />
+              </button>
+            </div>
+
             {/* SFX Volume Bar */}
             <div className="p-3.5 mb-2.5 bg-zinc-950/60 border border-zinc-800/80 rounded-xl">
               <div className="flex justify-between items-center mb-1.5">
@@ -291,7 +224,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             <div className="p-3.5 bg-zinc-950/60 border border-zinc-800/80 rounded-xl">
               <div className="flex justify-between items-center mb-1.5">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <Activity size={14} className="text-zinc-400 animate-pulse" />
+                  <Activity size={14} className="text-zinc-400" />
                   {t('impact_screen_shake', {}, 'Impact Screen Shake')}
                 </span>
                 <span className="text-xs font-mono font-black text-cyan-400">{Math.round(screenshakeMult * 100)}%</span>

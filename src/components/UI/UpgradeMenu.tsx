@@ -37,7 +37,7 @@ export default function UpgradeMenu({ upgrades, onSelect, playerWeapons, playerA
             <Sparkles className={isBossWeaponReward ? "text-amber-400" : "text-cyan-400"} size={20} />
             <h1 className="text-sm md:text-base font-black tracking-widest text-white font-mono uppercase">
               {isBossWeaponReward 
-                ? t('boss_reward_title', {}, 'SECTOR BOSS DEFEATED — CHOOSE A NEW WEAPON')
+                ? t('boss_reward_title', {}, 'SECTOR BOSS DEFEATED: CHOOSE A NEW WEAPON')
                 : t('choose_upgrade', {}, 'CHOOSE YOUR UPGRADE')}
             </h1>
           </div>
@@ -65,6 +65,7 @@ export default function UpgradeMenu({ upgrades, onSelect, playerWeapons, playerA
           let levelLabel = t('new_label', {}, 'NEW');
           let isLevelUp = false;
           let nextMutationLevel: number | null = null;
+          let isAbilityMaxPick = false;
 
           if (upgrade.type === 'WEAPON') {
             const exactOwned = playerWeapons.find(w => w.type === upgrade.weaponType);
@@ -96,8 +97,9 @@ export default function UpgradeMenu({ upgrades, onSelect, playerWeapons, playerA
             ownedItem = exactOwned || baseOwned;
             isLevelUp = !!ownedItem;
             const maxLvl = exactOwned ? getAbilityMaxLevel(exactOwned.type) : 15;
+            isAbilityMaxPick = upgrade.type === 'ABILITY' && !!exactOwned && exactOwned.level + 1 >= maxLvl;
             levelLabel = exactOwned 
-              ? (exactOwned.level + 1 > maxLvl ? `${t('level_label', {}, 'LEVEL')} ${exactOwned.level} (MAX)` : `${t('level_label', {}, 'LEVEL')} ${exactOwned.level + 1}`) 
+              ? (isAbilityMaxPick ? `${t('level_label', {}, 'LEVEL')} ${exactOwned.level + 1} (MAX)` : `${t('level_label', {}, 'LEVEL')} ${exactOwned.level + 1}`) 
               : (baseOwned ? `${t('evolve', {}, 'EVOLVE')}` : t('new_label', {}, 'NEW'));
 
             const targetAbilityType = exactOwned ? exactOwned.type : (upgrade.abilityType || (baseOwned ? baseOwned.type : undefined));
@@ -138,6 +140,13 @@ export default function UpgradeMenu({ upgrades, onSelect, playerWeapons, playerA
             rarityLabel = t('rare_rarity', {}, 'RARE');
             cardBorder = 'border-purple-500/80 hover:border-purple-400 bg-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.2)] hover:shadow-[0_0_30px_rgba(168,85,247,0.4)]';
             badgeBg = 'bg-purple-600 text-white';
+          }
+
+          // Reaching an ability's max level (10) earns the permanent gold treatment
+          if (isAbilityMaxPick) {
+            rarityLabel = t('max_level_rarity', {}, 'MAX LEVEL');
+            cardBorder = 'border-amber-400 hover:border-amber-300 bg-amber-950/25 shadow-[0_0_22px_rgba(251,191,36,0.4)] hover:shadow-[0_0_34px_rgba(251,191,36,0.6)]';
+            badgeBg = 'bg-amber-400 text-black';
           }
 
           let typeLabel = t('stat_label', {}, 'STAT');
@@ -184,12 +193,12 @@ export default function UpgradeMenu({ upgrades, onSelect, playerWeapons, playerA
                 </div>
 
                 <div>
-                  <h3 className="font-sans text-lg md:text-xl font-black uppercase tracking-tight text-white group-hover:text-amber-300 transition-colors">
+                  <h3 className="not-italic font-mono text-lg md:text-xl font-black uppercase tracking-tight text-white group-hover:text-amber-300 transition-colors">
                     {t('up_name_' + upgrade.id, {}, upgrade.name)}
                   </h3>
                 </div>
 
-                <p className="text-xs sm:text-sm text-zinc-300 font-sans leading-relaxed line-clamp-3 font-medium">
+                <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed line-clamp-3 font-medium">
                   {t('up_desc_' + upgrade.id, {}, upgrade.description)}
                 </p>
               </div>

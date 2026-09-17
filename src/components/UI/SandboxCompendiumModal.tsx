@@ -81,7 +81,7 @@ export const SandboxCompendiumModal: React.FC<SandboxCompendiumModalProps> = ({
 
           {/* Body description */}
           <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-4">
-            <p className="text-xs text-zinc-300 font-sans leading-relaxed m-0">
+            <p className="text-xs text-zinc-300 leading-relaxed m-0">
               {t('sandbox_compendium_prompt', {}, 'Open the Compendium at any time to equip, level up, or mutate any weapon, tactical ability, and combat stat.')}
             </p>
           </div>

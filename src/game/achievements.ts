@@ -6,7 +6,7 @@ export interface Achievement {
   description: string;
   type: 'campaign' | 'survival';
   reward: {
-    type: 'skin' | 'aura';
+    type: 'skin';
     id: string;
     name: string;
     previewColor: string;
@@ -45,7 +45,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Void Conqueror',
     description: 'Purge Sector 3 subroutines by banishing the Void Singularity in Room 30.',
     type: 'campaign',
-    reward: { type: 'aura', id: 'void_particle', name: 'Void Particle Trail', previewColor: '#a855f7' },
+    reward: { type: 'skin', id: 'void_particle', name: 'Void Walker Skin', previewColor: '#a855f7' },
     conditionText: 'Defeat Sector 3 Boss (Room 30)'
   },
   {
@@ -61,7 +61,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Immortal Core',
     description: 'Maintain absolute defense by completing 5 consecutive Campaign rooms without taking any damage.',
     type: 'campaign',
-    reward: { type: 'aura', id: 'amethyst_aura', name: 'Amethyst Energy Aura', previewColor: '#c084fc' },
+    reward: { type: 'skin', id: 'amethyst_crystal', name: 'Amethyst Crystal Skin', previewColor: '#c084fc' },
     conditionText: 'Clear 5 consecutive Rooms with 0 damage taken'
   },
   {
@@ -69,7 +69,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Perfect Synergy',
     description: 'Overload weapon capacities by having 5 or more active weapons equipped at the same time in Campaign.',
     type: 'campaign',
-    reward: { type: 'aura', id: 'overcharged_sparks', name: 'Overcharged Sparks', previewColor: '#fb923c' },
+    reward: { type: 'skin', id: 'overcharged_sparks', name: 'Overcharged Core Skin', previewColor: '#fb923c' },
     conditionText: 'Equip 5+ weapons simultaneously'
   },
   {
@@ -103,7 +103,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Infinite Warrior',
     description: 'Push beyond limits by reaching Room 35 in infinite Survival mode as an ultimate combatant.',
     type: 'survival',
-    reward: { type: 'aura', id: 'solar_flare', name: 'Solar Flare Aura', previewColor: '#f59e0b' },
+    reward: { type: 'skin', id: 'solar_flare', name: 'Solar Flare Skin', previewColor: '#f59e0b' },
     conditionText: 'Reach Room 35 in Survival'
   },
   {
@@ -135,7 +135,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Bladestorm Enthusiast',
     description: 'Unleash a flurry of steel and blade particles by equipping Spinning Blade, Plasma Razor, and Arc Whip together.',
     type: 'survival',
-    reward: { type: 'aura', id: 'vortex_trail', name: 'Vortex Wind Trail', previewColor: '#a855f7' },
+    reward: { type: 'skin', id: 'vortex_trail', name: 'Vortex Wind Skin', previewColor: '#818cf8' },
     conditionText: 'Equip Spinning Blade, Plasma Razor & Arc Whip'
   },
   {
@@ -147,12 +147,44 @@ export const ACHIEVEMENTS: Achievement[] = [
     conditionText: 'Collect 5,000+ Credits in one Survival run'
   },
   {
-    id: 'surv_overloaded',
+    id: 'surv_overdrive',
     title: 'Overloaded Strike',
     description: 'Force systems into absolute overdrive by hitting 25 enemies within a brief overload cycle.',
     type: 'survival',
     reward: { type: 'skin', id: 'deep_obsidian', name: 'Deep Purple Obsidian Skin', previewColor: '#4f46e5' },
     conditionText: 'Hit 25+ enemies in one Overdrive cycle'
+  },
+  {
+    id: 'surv_phantom',
+    title: 'Phantom Slayer',
+    description: 'Track down and destroy the Phantom Ace by clearing Room 30 of Survival mode.',
+    type: 'survival',
+    reward: { type: 'skin', id: 'phantom_ace', name: 'Phantom Split Skin', previewColor: '#f472b6' },
+    conditionText: 'Clear Room 30 in Survival'
+  },
+  {
+    id: 'surv_exterminator',
+    title: 'Exterminator',
+    description: 'Eradicate 1,500 hostiles in a single Survival run.',
+    type: 'survival',
+    reward: { type: 'skin', id: 'toxic_green', name: 'Toxic Green Skin', previewColor: '#84cc16' },
+    conditionText: 'Kill 1,500 enemies in one Survival run'
+  },
+  {
+    id: 'surv_cryo',
+    title: 'Cryo Conqueror',
+    description: 'Endure to Room 100 of Survival and shatter the Cryo Sovereign.',
+    type: 'survival',
+    reward: { type: 'skin', id: 'frostbite', name: 'Frostbite Skin', previewColor: '#a5f3fc' },
+    conditionText: 'Reach Room 100 in Survival'
+  },
+  {
+    id: 'hard_sentinel',
+    title: 'Void Sentinel Slayer',
+    description: 'Overwhelm the Void Sentinel by defeating the Room 50 boss in Hardcore.',
+    type: 'campaign',
+    reward: { type: 'skin', id: 'void_eclipse', name: 'Void Eclipse Skin', previewColor: '#a855f7' },
+    conditionText: 'Defeat Room 50 boss in Hardcore'
   }
 ];
 
@@ -187,12 +219,4 @@ export const getEquippedSkin = (): string => {
 
 export const setEquippedSkin = (skinId: string) => {
   crazyGames.setItem('game_equipped_skin', skinId);
-};
-
-export const getEquippedAura = (): string => {
-  return localStorage.getItem('game_equipped_aura') || 'none';
-};
-
-export const setEquippedAura = (auraId: string) => {
-  crazyGames.setItem('game_equipped_aura', auraId);
 };

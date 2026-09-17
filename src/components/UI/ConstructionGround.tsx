@@ -289,7 +289,7 @@ export default function ConstructionGround({ engine, onUpdate, isSandbox }: Cons
           </div>
           <div>
             <h2 className="text-xs font-black uppercase text-amber-400 tracking-wider">{t('construction_title', {}, 'Defensive Sentry Grid')}</h2>
-            <p className="text-[10px] text-zinc-400 font-sans">{t('sentry_bases_subtitle', {}, 'Deploy automated combat sentries on the battlefield')}</p>
+            <p className="text-[10px] text-zinc-400">{t('sentry_bases_subtitle', {}, 'Deploy automated combat sentries on the battlefield')}</p>
           </div>
         </div>
         <div className="relative group/info shrink-0 flex items-center">
@@ -313,7 +313,7 @@ export default function ConstructionGround({ engine, onUpdate, isSandbox }: Cons
               RECOMMENDED ROUND 10+
             </span>
             <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">{t('sentry_grid_offline_title', {}, 'DEFENSE TURRETS')}</h3>
-            <p className="text-xs text-zinc-400 mt-2 leading-relaxed font-sans max-w-sm">
+            <p className="text-xs text-zinc-400 mt-2 leading-relaxed max-w-sm">
               {t('sentry_grid_offline_desc', {}, 'Build automated sentry turrets directly on the battlefield to blast enemies with laser swords, electric shock arcs, and heavy kinetic mortars!')}
             </p>
 
@@ -326,7 +326,7 @@ export default function ConstructionGround({ engine, onUpdate, isSandbox }: Cons
                 onClick={handleUnlock}
                 className={`w-full py-2.5 rounded-xl text-xs font-black font-mono transition-all uppercase cursor-pointer flex items-center justify-center gap-1.5 ${
                   currency >= 10000 || isSandbox || engine.gameMode.includes('SANDBOX')
-                    ? 'bg-amber-400 hover:bg-amber-300 text-black shadow-[0_0_20px_rgba(251,191,36,0.4)] animate-pulse'
+                    ? 'bg-amber-400 hover:bg-amber-300 text-black shadow-[0_0_20px_rgba(251,191,36,0.4)]'
                     : 'bg-zinc-800 border border-zinc-700 text-zinc-500 cursor-not-allowed'
                 }`}
               >
@@ -425,7 +425,7 @@ export default function ConstructionGround({ engine, onUpdate, isSandbox }: Cons
                         </div>
                         <span className="text-xs font-black uppercase text-white font-mono">{t(turret.id + '_name', {}, turret.name)}</span>
                       </div>
-                      <p className="text-[11px] text-zinc-400 leading-relaxed font-sans mt-1">{t(turret.id + '_description', {}, turret.description)}</p>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed mt-1">{t(turret.id + '_description', {}, turret.description)}</p>
                     </div>
                     
                     <button

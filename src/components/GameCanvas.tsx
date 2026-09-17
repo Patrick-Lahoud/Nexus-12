@@ -2,6 +2,445 @@ import React, { useRef, useEffect, useState } from 'react';
 import { GameEngine } from '../game/engine.ts';
 import { useGameLoop } from '../hooks/useGameLoop.ts';
 import { EntityType, WeaponType, AbilityType } from '../game/types.ts';
+import { getSkinById, SkinDef } from '../game/skins.ts';
+
+// Draws a skin's unique pattern on a ball of the given radius, centered at (cx, cy).
+// Used by the in-game player render and the locker preview so both stay identical.
+export function drawSkinPattern(ctx: CanvasRenderingContext2D, skin: SkinDef | undefined, cx: number, cy: number, radius: number) {
+  if (!skin || skin.pattern === 'none') return;
+  const accent = skin.patternColor || '#ffffff';
+  const t = Date.now() * 0.001;
+  ctx.save();
+  // Clip to the ball so patterns never spill over the edge
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * 0.96, 0, Math.PI * 2);
+  ctx.clip();
+
+  switch (skin.pattern) {
+    case 'hologrid': {
+      // Scanning green grid lines drifting downward
+      ctx.strokeStyle = `rgba(134, 239, 172, 0.55)`;
+      ctx.lineWidth = 1;
+      const step = radius * 0.5;
+      const off = (t * radius * 0.4) % step;
+      for (let i = -1; i <= 2; i++) {
+        const y = cy - radius + off + (i + 1) * step;
+        ctx.beginPath(); ctx.moveTo(cx - radius, y); ctx.lineTo(cx + radius, y); ctx.stroke();
+      }
+      for (let i = -1; i <= 2; i++) {
+        const x = cx - radius + (i + 1) * step;
+        ctx.beginPath(); ctx.moveTo(x, cy - radius); ctx.lineTo(x, cy + radius); ctx.stroke();
+      }
+      break;
+    }
+    case 'energy_core': {
+      // Glowing inner reactor core with a soft pulse
+      const pulse = 0.5 + Math.sin(t * 4) * 0.25;
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 0.7);
+      grad.addColorStop(0, accent);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalAlpha = 0.5 + pulse * 0.4;
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(cx, cy, radius * 0.7, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'pulse_rings': {
+      // Expanding shockwave rings from the core
+      for (let i = 0; i < 2; i++) {
+        const phase = ((t * 0.6 + i * 0.5) % 1);
+        ctx.strokeStyle = accent;
+        ctx.globalAlpha = 0.7 * (1 - phase);
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(cx, cy, radius * 0.2 + phase * radius * 0.85, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'star_spangle': {
+      // Rotating 4-point star sparkle offset from center
+      const ang = t * 1.2;
+      const sx = cx + Math.cos(ang) * radius * 0.35;
+      const sy = cy + Math.sin(ang) * radius * 0.35;
+      const sr = radius * 0.28;
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const r = i % 2 === 0 ? sr : sr * 0.32;
+        const a = ang + (Math.PI * 2 / 8) * i;
+        const px = sx + Math.cos(a) * r;
+        const py = sy + Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'molten_cracks': {
+      // Jagged glowing cracks radiating from the center
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = Math.max(1.5, radius * 0.09);
+      for (let i = 0; i < 5; i++) {
+        const a = (Math.PI * 2 / 5) * i + 0.4;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * radius * 0.1, cy + Math.sin(a) * radius * 0.1);
+        ctx.lineTo(cx + Math.cos(a + 0.25) * radius * 0.5, cy + Math.sin(a + 0.25) * radius * 0.5);
+        ctx.lineTo(cx + Math.cos(a - 0.1) * radius * 0.92, cy + Math.sin(a - 0.1) * radius * 0.92);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'orbit_dots': {
+      // Two satellite motes orbiting the equator
+      for (let i = 0; i < 2; i++) {
+        const a = t * 2 + i * Math.PI;
+        const dx = Math.cos(a) * radius * 0.55;
+        ctx.fillStyle = accent;
+        ctx.beginPath(); ctx.arc(cx + dx, cy + Math.sin(a) * radius * 0.18, radius * 0.12, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    }
+    case 'bolt_seam': {
+      // Lightning seam zig-zagging down the ball
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = Math.max(1.5, radius * 0.08);
+      ctx.beginPath();
+      ctx.moveTo(cx - radius * 0.1, cy - radius);
+      ctx.lineTo(cx + radius * 0.3, cy - radius * 0.4);
+      ctx.lineTo(cx - radius * 0.25, cy - radius * 0.1);
+      ctx.lineTo(cx + radius * 0.2, cy + radius * 0.5);
+      ctx.lineTo(cx, cy + radius);
+      ctx.stroke();
+      break;
+    }
+    case 'void_swirl': {
+      // Spiral vortex arms rotating slowly
+      ctx.strokeStyle = accent;
+      ctx.globalAlpha = 0.8;
+      ctx.lineWidth = Math.max(1.5, radius * 0.1);
+      for (let arm = 0; arm < 2; arm++) {
+        ctx.beginPath();
+        for (let i = 0; i <= 20; i++) {
+          const f = i / 20;
+          const a = t * 1.5 + arm * Math.PI + f * Math.PI * 1.8;
+          const r = f * radius * 0.9;
+          const px = cx + Math.cos(a) * r;
+          const py = cy + Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'hemostripes': {
+      // Diagonal combat stripes
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = Math.max(2, radius * 0.16);
+      for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx - radius + i * radius * 0.5, cy + radius);
+        ctx.lineTo(cx + radius + i * radius * 0.5, cy - radius);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'platinum_shine': {
+      // Moving specular band
+      const phase = (t * 0.7) % 1.6 - 0.3;
+      // The band slides through and off the gradient range; skip frames where
+      // it is fully outside [0,1] so color stops never exceed the valid range.
+      if (phase > -0.2 && phase < 1.2) {
+        const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+        const grad = ctx.createLinearGradient(cx - radius, cy - radius, cx + radius, cy + radius);
+        grad.addColorStop(clamp01(phase - 0.18), 'rgba(255,255,255,0)');
+        grad.addColorStop(clamp01(phase), 'rgba(255,255,255,0.75)');
+        grad.addColorStop(clamp01(phase + 0.18), 'rgba(255,255,255,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    }
+    case 'venom_drips': {
+      // Drips sliding down from the top of the ball
+      ctx.fillStyle = accent;
+      for (let i = 0; i < 3; i++) {
+        const dx = (i - 1) * radius * 0.45;
+        const dy = ((t * radius * 0.8 + i * radius * 0.6) % (radius * 1.4)) - radius * 0.2;
+        const dr = radius * 0.14;
+        ctx.beginPath();
+        ctx.moveTo(cx + dx - dr, cy - radius * 0.4);
+        ctx.quadraticCurveTo(cx + dx, cy + dy, cx + dx + dr, cy - radius * 0.4);
+        ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + dx, cy + dy, dr, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    }
+    case 'frost_rime': {
+      // Ice crystal spikes around the rim
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = Math.max(1, radius * 0.06);
+      for (let i = 0; i < 8; i++) {
+        const a = (Math.PI * 2 / 8) * i + t * 0.3;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * radius * 0.75, cy + Math.sin(a) * radius * 0.75);
+        ctx.lineTo(cx + Math.cos(a) * radius * 1.0, cy + Math.sin(a) * radius * 1.0);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a + 0.2) * radius * 0.88, cy + Math.sin(a + 0.2) * radius * 0.88);
+        ctx.lineTo(cx + Math.cos(a) * radius * 1.0, cy + Math.sin(a) * radius * 1.0);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'phantom_mask': {
+      // Split face: dark left half, light right half with a divider
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, Math.PI * 0.5, Math.PI * 1.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = Math.max(1, radius * 0.07);
+      ctx.beginPath(); ctx.moveTo(cx, cy - radius); ctx.lineTo(cx, cy + radius); ctx.stroke();
+      break;
+    }
+    case 'particle_leak': {
+      // Void Walker: violet motes drifting up and off the ball
+      for (let i = 0; i < 7; i++) {
+        const seed = i * 2.399;
+        const px = cx + Math.sin(seed) * radius * 0.55;
+        const life = ((t * 0.45 + i * 0.14) % 1);
+        const py = cy + radius * 0.7 - life * radius * 1.4;
+        const pr = radius * 0.07 * (1 - life * 0.6);
+        ctx.globalAlpha = 0.85 * (1 - life);
+        ctx.fillStyle = accent;
+        ctx.beginPath(); ctx.arc(px, py, Math.max(0.5, pr), 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'crystal_facets': {
+      // Amethyst: slow-rotating triangular facet shards
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(t * 0.15);
+      for (let i = 0; i < 5; i++) {
+        const a = (Math.PI * 2 / 5) * i;
+        ctx.fillStyle = accent;
+        ctx.globalAlpha = i % 2 === 0 ? 0.3 : 0.18;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * radius * 0.15, Math.sin(a) * radius * 0.15);
+        ctx.lineTo(Math.cos(a - 0.5) * radius, Math.sin(a - 0.5) * radius);
+        ctx.lineTo(Math.cos(a + 0.5) * radius, Math.sin(a + 0.5) * radius);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'live_sparks': {
+      // Overcharged Core: jittering electric arcs leaping across the core
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = Math.max(1, radius * 0.055);
+      for (let i = 0; i < 4; i++) {
+        const a0 = Math.sin(t * 7 + i * 2.1) * Math.PI;
+        const r0 = radius * 0.2;
+        const r1 = radius * (0.65 + 0.25 * Math.abs(Math.sin(t * 11 + i * 1.7)));
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a0) * r0, cy + Math.sin(a0) * r0);
+        const mx = cx + Math.cos(a0 + 0.5) * (r0 + r1) * 0.5 + (Math.sin(t * 23 + i) * radius * 0.15);
+        const my = cy + Math.sin(a0 + 0.5) * (r0 + r1) * 0.5 + (Math.cos(t * 19 + i) * radius * 0.15);
+        ctx.lineTo(mx, my);
+        ctx.lineTo(cx + Math.cos(a0 + 0.9) * r1, cy + Math.sin(a0 + 0.9) * r1);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'heat_waves': {
+      // Solar Flare: rising translucent heat bands
+      for (let i = 0; i < 3; i++) {
+        const ph = (t * 0.5 + i * 0.33) % 1;
+        const yy = cy + radius * 0.8 - ph * radius * 1.6;
+        ctx.strokeStyle = accent;
+        ctx.globalAlpha = 0.4 * (1 - ph);
+        ctx.lineWidth = Math.max(1.5, radius * 0.1);
+        ctx.beginPath();
+        ctx.moveTo(cx - radius * 0.85, yy);
+        ctx.quadraticCurveTo(cx, yy - radius * 0.25, cx + radius * 0.85, yy);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'cyclone_streaks': {
+      // Vortex Wind: curved streak lines shearing around the core
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = Math.max(1, radius * 0.06);
+      for (let i = 0; i < 4; i++) {
+        const a0 = t * 1.4 + (Math.PI / 2) * i;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * (0.35 + i * 0.17), a0, a0 + 1.9);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'voltage_flicker': {
+      // Vibrant Cyan: CRT scanlines flickering across the ball
+      const flick = 0.16 + Math.abs(Math.sin(t * 13)) * 0.2;
+      ctx.fillStyle = accent;
+      ctx.globalAlpha = flick;
+      const step = Math.max(3, radius * 0.22);
+      const off = (t * radius * 0.9) % step;
+      for (let i = -1; i <= 4; i++) {
+        ctx.fillRect(cx - radius, cy - radius + off + i * step, radius * 2, Math.max(1, radius * 0.07));
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'thermal_charge': {
+      // Neon Magenta: vertical charge bars rising from the bottom
+      for (let i = 0; i < 3; i++) {
+        const w = radius * 0.18;
+        const dx = (i - 1) * radius * 0.55;
+        const ph = (t * 0.6 + i * 0.37) % 1;
+        const h = radius * 1.7 * ph;
+        ctx.globalAlpha = 0.45 * (1 - ph) + 0.15;
+        ctx.fillStyle = accent;
+        ctx.fillRect(cx + dx - w / 2, cy + radius - h, w, h);
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'bio_circuit': {
+      // Emerald Green: circuit traces pulsing outward from the core
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = Math.max(1, radius * 0.05);
+      const pulse = 0.5 + Math.sin(t * 3) * 0.5;
+      ctx.globalAlpha = 0.35 + pulse * 0.45;
+      for (let i = 0; i < 4; i++) {
+        const a = (Math.PI / 2) * i + Math.PI / 4;
+        const ax = cx + Math.cos(a) * radius * 0.25;
+        const ay = cy + Math.sin(a) * radius * 0.25;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(ax + Math.cos(a) * radius * 0.35, ay + Math.sin(a) * radius * 0.35);
+        ctx.lineTo(ax + Math.cos(a + 0.6) * radius * 0.75, ay + Math.sin(a + 0.6) * radius * 0.75);
+        ctx.stroke();
+        // Node dot at each trace end
+        ctx.fillStyle = accent;
+        ctx.beginPath();
+        ctx.arc(ax + Math.cos(a + 0.6) * radius * 0.75, ay + Math.sin(a + 0.6) * radius * 0.75, Math.max(1, radius * 0.06), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+// --- Enhanced enemy detail (pixel-art-professional shading) ---
+// Shadows hue-shift cool, highlights shift warm, never pure black/white.
+function shadeColor(hex: string, amount: number): string {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec((hex || '').trim());
+  let r = 200, g = 80, b = 160;
+  if (m) {
+    const s = m[1];
+    if (s.length === 3) {
+      r = parseInt(s[0] + s[0], 16); g = parseInt(s[1] + s[1], 16); b = parseInt(s[2] + s[2], 16);
+    } else {
+      r = parseInt(s.slice(0, 2), 16); g = parseInt(s.slice(2, 4), 16); b = parseInt(s.slice(4, 6), 16);
+    }
+  }
+  if (amount >= 0) {
+    // Warm highlight: blend toward tinted warm white
+    r = Math.round(r + (255 - r) * amount);
+    g = Math.round(g + (241 - g) * amount);
+    b = Math.round(b + (224 - b) * amount);
+  } else {
+    // Cool shadow: blend toward deep blue-purple, never pure black
+    const k = -amount;
+    r = Math.round(r * (1 - k) + 18 * k);
+    g = Math.round(g * (1 - k) + 20 * k);
+    b = Math.round(b * (1 - k) + 44 * k);
+  }
+  return `rgb(${r},${g},${b})`;
+}
+
+// Cache gradients per color+rounded-radius: the pulse makes visualRadius wobble
+// every frame, and rebuilding a gradient per enemy per frame is pure churn.
+const enemyBodyGradCache = new Map<string, CanvasGradient>();
+
+// Shaded metal block used for boss cannons, plates and turrets: gradient fill with
+// a global top-left key light, beveled highlight edge and dark opposite edge.
+// Must be called inside the target's local (already rotated) context.
+// Stylized metal plate matching the game's soft 3D-ball look: one gentle
+// top-left light ramp, a soft outline and a single rim light. No rivets,
+// no hard bevels, no hyper-real metallic detail.
+function drawMetalPlate(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, base: string, accent: string, radius: number = 3) {
+  const grad = ctx.createLinearGradient(x, y, x + w, y + h);
+  grad.addColorStop(0, shadeColor(base, 0.25));
+  grad.addColorStop(0.5, base);
+  grad.addColorStop(1, shadeColor(base, -0.4));
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, radius);
+  else ctx.rect(x, y, w, h);
+  ctx.fill();
+  ctx.strokeStyle = shadeColor(base, -0.55);
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  // Soft rim light on the top edge only, same as the ball shading
+  ctx.strokeStyle = shadeColor(base, 0.4);
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y + 1);
+  ctx.lineTo(x + w - radius, y + 1);
+  ctx.stroke();
+}
+
+// Enhanced body: hue-shifted cell shading with a top-left key light,
+// directional rim light and a hot core. Flat arc fills only (no per-pixel blur).
+// alpha < 1 keeps holographic translucency (used for player clones).
+function drawEnemyBody(ctx: CanvasRenderingContext2D, baseColor: string, radius: number, isBoss: boolean, alpha: number = 1, cx: number = 0, cy: number = 0) {
+  const lightAngle = -Math.PI * 0.75; // top-left
+  if (alpha < 1) {
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+  }
+
+  // Radial ramp: warm highlight top-left, base midtone, cool shadow bottom-right
+  // Cached only for translated (origin-centered) callers; explicit positions build fresh.
+  const canCache = cx === 0 && cy === 0;
+  const gradKey = `${baseColor}|${Math.round(radius)}|${ctx.canvas.width}x${ctx.canvas.height}`;
+  let grad = canCache ? enemyBodyGradCache.get(gradKey) : undefined;
+  if (!grad) {
+    grad = ctx.createRadialGradient(
+      cx + Math.cos(lightAngle) * radius * 0.45, cy + Math.sin(lightAngle) * radius * 0.45, radius * 0.1,
+      cx, cy, radius
+    );
+    grad.addColorStop(0, shadeColor(baseColor, 0.28));
+    grad.addColorStop(0.55, baseColor);
+    grad.addColorStop(1, shadeColor(baseColor, -0.45));
+    if (canCache) enemyBodyGradCache.set(gradKey, grad);
+  }
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Thin light rim on the lit edge (top-left arc)
+  const rimW = isBoss ? 3 : 2;
+  ctx.strokeStyle = shadeColor(baseColor, 0.45);
+  ctx.lineWidth = rimW;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius - rimW * 0.5, lightAngle - Math.PI * 0.55, lightAngle + Math.PI * 0.55);
+  ctx.stroke();
+
+  if (alpha < 1) {
+    ctx.restore();
+  }
+}
 
 interface GameCanvasProps {
   engine: GameEngine;
@@ -22,6 +461,7 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
     gfxNeonLighting: localStorage.getItem('gfx_neon_lighting') !== 'false',
     gfxDebrisFx: localStorage.getItem('gfx_debris_fx') !== 'false',
     gfxCinematicFx: localStorage.getItem('gfx_cinematic_fx') !== 'false',
+    gfxEnemyDetail: localStorage.getItem('gfx_enemy_detail') !== 'false',
   });
 
   useEffect(() => {
@@ -35,6 +475,7 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
         gfxNeonLighting: localStorage.getItem('gfx_neon_lighting') !== 'false',
         gfxDebrisFx: localStorage.getItem('gfx_debris_fx') !== 'false',
         gfxCinematicFx: localStorage.getItem('gfx_cinematic_fx') !== 'false',
+        gfxEnemyDetail: localStorage.getItem('gfx_enemy_detail') !== 'false',
       });
     };
     window.addEventListener('game_settings_updated', handleSettingsUpdate);
@@ -46,8 +487,10 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
     if (!isPaused && !engine.player?.isDead) {
       engine.update(dt);
     }
-    // Adaptive frame-skipping: if previous tick execution exceeded 16ms budget, skip draw frame to let physics catch up
-    if (!info.shouldSkipRender) {
+    // Adaptive frame-skipping: if previous tick execution exceeded 16ms budget, skip draw frame to let physics catch up.
+    // While paused (menus, shop, compendium open) skip drawing entirely: the canvas keeps its last frame, which stops
+    // the constant 60fps redraw (and its re-composite under blurred modals) from burning GPU time.
+    if (!info.shouldSkipRender && !isPaused) {
       draw(info.isHeavyLoad);
     }
   });
@@ -70,9 +513,18 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
       }
     }
 
-    // Clear & Fill Arena Background
-    ctx.fillStyle = '#08080c';
+    // Clear & Fill Arena Background: color matches the page background, and the whole
+    // scene is clipped to the rounded arena boundary (radius 52, matching physics) so no
+    // grid dots, stars, or particles show in the corner regions.
+    ctx.fillStyle = settings.retroTheme ? '#030306' : '#020205';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') {
+      ctx.roundRect(1, 1, canvas.width - 2, canvas.height - 2, 52);
+    } else {
+      ctx.rect(0, 0, canvas.width, canvas.height);
+    }
+    ctx.clip();
 
     const timeSec = Date.now() / 1000;
     const pPos = engine.player?.pos || { x: canvas.width / 2, y: canvas.height / 2 };
@@ -187,21 +639,6 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
       ctx.restore();
     }
 
-    // Clean Outer Arena Boundary with rounded corners matching physics (radius 52)
-    ctx.save();
-    ctx.strokeStyle = settings.retroTheme 
-      ? (room % 10 === 0 ? '#f43f5e' : '#f59e0b') 
-      : (room % 10 === 0 ? '#ef4444' : '#27273a');
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    if (typeof ctx.roundRect === 'function') {
-      ctx.roundRect(1, 1, canvas.width - 2, canvas.height - 2, 52);
-    } else {
-      ctx.rect(0, 0, canvas.width, canvas.height);
-    }
-    ctx.stroke();
-    ctx.restore();
-
     // Draw Particles
     engine.particles.forEach(p => {
         if (p.type === 'RAIL') {
@@ -224,21 +661,27 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
             ctx.stroke();
         }
         if (p.type === 'FIRE') {
-            const glowColor = p.isEvolved ? 'rgba(239, 68, 68,' : 'rgba(249, 115, 22,';
-            // Set semi-transparent alpha for trials as requested
-            const alpha = (p.life / (p.isEvolved ? 4 : 2)) * 0.4;
-            ctx.fillStyle = `${glowColor} ${alpha})`;
-            ctx.beginPath();
-            const radius = (p.isEvolved ? 25 : 15) * (p.life / 2);
-            ctx.arc(p.pos.x, p.pos.y, Math.max(0, radius), 0, Math.PI * 2);
-            ctx.fill();
-            
-            if (p.isEvolved) {
-                // Hot core - also semi-transparent
-                ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.6})`;
+            // Soft additive gradient blob: overlaps blend into one continuous flame
+            const radius = Math.max(0, (p.isEvolved ? 25 : 15) * (p.life / 2));
+            if (radius > 0.5) {
+                const alpha = (p.life / (p.isEvolved ? 4 : 2)) * 0.55;
+                const grad = ctx.createRadialGradient(p.pos.x, p.pos.y, 0, p.pos.x, p.pos.y, radius);
+                if (p.isEvolved) {
+                    grad.addColorStop(0, `rgba(255, 200, 120, ${alpha})`);
+                    grad.addColorStop(0.35, `rgba(239, 68, 68, ${alpha * 0.9})`);
+                    grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+                } else {
+                    grad.addColorStop(0, `rgba(255, 210, 130, ${alpha})`);
+                    grad.addColorStop(0.35, `rgba(249, 115, 22, ${alpha * 0.9})`);
+                    grad.addColorStop(1, 'rgba(249, 115, 22, 0)');
+                }
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.fillStyle = grad;
                 ctx.beginPath();
-                ctx.arc(p.pos.x, p.pos.y, Math.max(0, radius * 0.4), 0, Math.PI * 2);
+                ctx.arc(p.pos.x, p.pos.y, radius, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.restore();
             }
         }
         if (p.type === 'ARC') {
@@ -432,12 +875,19 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
 
         if (c.archetype === 'MELEE') {
             // --- 1. PURPLE SPINNING BLADE MELEE CLONE ---
-            ctx.fillStyle = '#3b0764';
+            if (settings.gfxEnemyDetail) {
+                // Shaded holographic hull: same 3D look as enemies but translucent
+                drawEnemyBody(ctx, '#7e22ce', c.radius, false, 0.6);
+            } else {
+                ctx.fillStyle = '#3b0764';
+                ctx.beginPath();
+                ctx.arc(0, 0, c.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
             ctx.strokeStyle = '#c084fc';
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.arc(0, 0, c.radius, 0, Math.PI * 2);
-            ctx.fill();
             ctx.stroke();
 
             // Core energy eye
@@ -494,12 +944,18 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
             ctx.rotate(aimAng + Math.PI / 2);
 
             // Heavy Red/Gold Body
-            ctx.fillStyle = '#7f1d1d';
+            if (settings.gfxEnemyDetail) {
+                drawEnemyBody(ctx, '#b91c1c', c.radius, false, 0.6);
+            } else {
+                ctx.fillStyle = '#7f1d1d';
+                ctx.beginPath();
+                ctx.arc(0, 0, c.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
             ctx.strokeStyle = '#ef4444';
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.arc(0, 0, c.radius, 0, Math.PI * 2);
-            ctx.fill();
             ctx.stroke();
 
             // Heavy Shotgun Twin Cannons (Extending forward towards target, -Y)
@@ -567,12 +1023,18 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
             ctx.rotate(aimAng + Math.PI / 2);
 
             // Precision Body
-            ctx.fillStyle = '#0c4a6e';
+            if (settings.gfxEnemyDetail) {
+                drawEnemyBody(ctx, '#0369a1', c.radius, false, 0.6);
+            } else {
+                ctx.fillStyle = '#0c4a6e';
+                ctx.beginPath();
+                ctx.arc(0, 0, c.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
             ctx.strokeStyle = '#38bdf8';
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.arc(0, 0, c.radius, 0, Math.PI * 2);
-            ctx.fill();
             ctx.stroke();
 
             // Long High-Caliber Railgun Barrel (Extending forward -Y)
@@ -610,13 +1072,19 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
             const aimAng = c.aimAngle !== undefined ? c.aimAngle : 0;
             ctx.rotate(aimAng + Math.PI / 2);
 
-            ctx.fillStyle = c.color || 'rgba(56, 189, 248, 0.4)';
+            if (settings.gfxEnemyDetail) {
+                drawEnemyBody(ctx, '#0ea5e9', c.radius, false, 0.55);
+            } else {
+                ctx.fillStyle = c.color || 'rgba(56, 189, 248, 0.4)';
+                ctx.beginPath();
+                ctx.arc(0, 0, c.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
             ctx.strokeStyle = '#38bdf8';
             ctx.lineWidth = 1.5;
             ctx.setLineDash([3, 3]);
             ctx.beginPath();
             ctx.arc(0, 0, c.radius, 0, Math.PI * 2);
-            ctx.fill();
             ctx.stroke();
             ctx.setLineDash([]);
 
@@ -1101,6 +1569,111 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
                     ctx.lineTo(x2, y2);
                     ctx.stroke();
                 }
+            } else if (f.type === 'toxin_cloud') {
+                // Toxic green poisonous cloud at field location
+                const r = f.radius;
+                const lifePct = Math.max(0, Math.min(1, f.life / (f.maxLife || 6)));
+
+                // Outer green haze
+                const grad = ctx.createRadialGradient(0, 0, 4, 0, 0, r);
+                grad.addColorStop(0, `rgba(74, 222, 128, ${0.28 * lifePct})`);
+                grad.addColorStop(0.6, `rgba(21, 128, 61, ${0.22 * lifePct})`);
+                grad.addColorStop(1, 'rgba(21, 128, 61, 0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(0, 0, r, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Pulsing inner toxin core
+                const corePulse = 0.7 + Math.sin(now * 4 + (f.pos.x + f.pos.y) * 0.01) * 0.3;
+                ctx.fillStyle = `rgba(163, 230, 53, ${0.5 * lifePct * corePulse})`;
+                ctx.beginPath();
+                ctx.arc(0, 0, r * 0.4 * corePulse, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Poison droplet particles drifting
+                ctx.fillStyle = `rgba(187, 253, 123, ${0.6 * lifePct})`;
+                for (let i = 0; i < 5; i++) {
+                    const a = now * 1.5 + i * 1.256;
+                    const d = r * (0.4 + Math.sin(now * 2 + i * 1.7) * 0.25);
+                    ctx.beginPath();
+                    ctx.arc(Math.cos(a) * d, Math.sin(a * 0.7) * d * 0.6, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+            } else if (f.type === 'incendiary_blast') {
+                // Burning fire cone/zone at field location
+                const r = f.radius;
+                const lifePct = Math.max(0, Math.min(1, f.life / (f.maxLife || 2)));
+
+                // Outer fire aura
+                const grad = ctx.createRadialGradient(0, 0, 6, 0, 0, r);
+                grad.addColorStop(0, `rgba(255, 255, 255, ${0.5 * lifePct})`);
+                grad.addColorStop(0.25, `rgba(251, 191, 36, ${0.5 * lifePct})`);
+                grad.addColorStop(0.6, `rgba(249, 115, 22, ${0.35 * lifePct})`);
+                grad.addColorStop(1, 'rgba(249, 115, 22, 0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(0, 0, r, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Fire flicker licks
+                ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 * lifePct})`;
+                ctx.lineWidth = 2;
+                for (let i = 0; i < 7; i++) {
+                    const a = now * 8 + i * 0.9;
+                    const d = r * (0.5 + Math.sin(now * 5 + i * 2.3) * 0.3);
+                    ctx.beginPath();
+                    ctx.moveTo(Math.cos(a) * r * 0.3, Math.sin(a) * r * 0.3);
+                    const ex = Math.cos(a + 0.4) * d;
+                    const ey = Math.sin(a + 0.4) * d;
+                    ctx.quadraticCurveTo(
+                        Math.cos(a + 0.2) * d * 0.7,
+                        Math.sin(a + 0.2) * d * 0.7,
+                        ex, ey
+                    );
+                    ctx.stroke();
+                }
+
+            } else if (f.type === 'arc_chain') {
+                // Fading in-flight chain lightning arcs
+                for (const arc of (f.arcTargets || [])) {
+                    const alpha = Math.max(0, arc.life / 0.35);
+                    const midX = (arc.from.x + arc.to.x) / 2 + Math.sin(now * 12 + arc.from.x) * 18;
+                    const midY = (arc.from.y + arc.to.y) / 2 + Math.cos(now * 10 + arc.from.y) * 18;
+
+                    // Outer discharge glow
+                    ctx.strokeStyle = `rgba(125, 211, 252, ${0.7 * alpha})`;
+                    ctx.lineWidth = 6;
+                    ctx.beginPath();
+                    ctx.moveTo(arc.from.x, arc.from.y);
+                    ctx.quadraticCurveTo(midX, midY, arc.to.x, arc.to.y);
+                    ctx.stroke();
+
+                    // Inner bright core
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(arc.from.x, arc.from.y);
+                    ctx.quadraticCurveTo(midX, midY, arc.to.x, arc.to.y);
+                    ctx.stroke();
+
+                    // Branch sparks
+                    ctx.strokeStyle = `rgba(56, 189, 248, ${0.6 * alpha})`;
+                    ctx.lineWidth = 1.5;
+                    for (let b = 0; b < 3; b++) {
+                        const ba = 0.33 + b * 0.33;
+                        const bx = arc.from.x + (arc.to.x - arc.from.x) * ba;
+                        const by = arc.from.y + (arc.to.y - arc.from.y) * ba;
+                        const offX = Math.sin(now * 15 + b * 2 + arc.from.x) * 14;
+                        const offY = Math.cos(now * 13 + b * 2 + arc.from.y) * 14;
+                        ctx.beginPath();
+                        ctx.moveTo(bx, by);
+                        ctx.lineTo(bx + offX, by + offY);
+                        ctx.stroke();
+                    }
+                }
+
             }
 
             ctx.restore();
@@ -1627,13 +2200,23 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
         ctx.arc(0, 0, visualRadius, 0, Math.PI * 2);
         ctx.stroke();
       }
-      ctx.fillStyle = e.isFrozen ? '#7dd3fc' : e.color;
-      ctx.strokeStyle = e.isFrozen ? '#fff' : '#fff';
-      ctx.lineWidth = isBoss ? 4 : 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, visualRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      if (settings.gfxEnemyDetail && !e.isFrozen) {
+        // Enhanced body: hue-shifted shading, rim light and hot core
+        drawEnemyBody(ctx, e.color, visualRadius, isBoss);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.lineWidth = isBoss ? 3 : 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, visualRadius, 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = e.isFrozen ? '#7dd3fc' : e.color;
+        ctx.strokeStyle = e.isFrozen ? '#fff' : '#fff';
+        ctx.lineWidth = isBoss ? 4 : 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, visualRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
 
       // Frost / Slow overlay
       if (e.isFrozen) {
@@ -1977,6 +2560,113 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
           ctx.beginPath();
           ctx.arc(0, 0, visualRadius * 0.55, 0, Math.PI * 2);
           ctx.fill();
+      } else if (e.enemyType === 'VOID_MARAUDER') {
+          // Blink predator: dark violet core with a wispy warp aura
+          const vPulse = Math.sin(Date.now() * 0.008) * 3;
+          ctx.strokeStyle = '#a78bfa';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, visualRadius + vPulse, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = '#7c3aed';
+          ctx.beginPath();
+          ctx.arc(0, 0, visualRadius * 0.7, 0, Math.PI * 2);
+          ctx.fill();
+          // Twin warp wisps orbiting
+          const wt = Date.now() * 0.004;
+          ctx.fillStyle = '#c4b5fd';
+          for (let i = 0; i < 2; i++) {
+              const wa = wt + i * Math.PI;
+              ctx.beginPath();
+              ctx.arc(Math.cos(wa) * (visualRadius + 6), Math.sin(wa) * (visualRadius + 6), 3.5, 0, Math.PI * 2);
+              ctx.fill();
+          }
+      } else if (e.enemyType === 'TIME_EATER') {
+          // Temporal parasite: golden clockwork core with orbiting chrono ticks
+          const tPulse = Math.sin(Date.now() * 0.012) * 3;
+          ctx.strokeStyle = '#fbbf24';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, visualRadius + tPulse, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = '#b45309';
+          ctx.beginPath();
+          ctx.arc(0, 0, visualRadius * 0.62, 0, Math.PI * 2);
+          ctx.fill();
+          // Rotating tick marks like a clock face
+          ctx.strokeStyle = '#fde68a';
+          ctx.lineWidth = 2;
+          const ct = Date.now() * 0.002;
+          for (let i = 0; i < 4; i++) {
+              const ta = ct + (i / 4) * Math.PI * 2;
+              ctx.beginPath();
+              ctx.moveTo(Math.cos(ta) * (visualRadius * 0.4), Math.sin(ta) * (visualRadius * 0.4));
+              ctx.lineTo(Math.cos(ta) * (visualRadius * 0.85), Math.sin(ta) * (visualRadius * 0.85));
+              ctx.stroke();
+          }
+      } else if (e.enemyType === 'SINGULARITY_SEED') {
+          // Collapsing core: dark indigo sphere with a tight accretion ring
+          const sPulse = Math.sin(Date.now() * 0.02) * 4;
+          const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, visualRadius);
+          grad.addColorStop(0, '#000');
+          grad.addColorStop(0.7, '#1e1b4b');
+          grad.addColorStop(1, '#6366f1');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(0, 0, visualRadius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#818cf8';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(0, 0, visualRadius + sPulse, 0, Math.PI * 2);
+          ctx.stroke();
+      } else if (e.enemyType === 'PLAGUE_SPREADER') {
+          // Contagion carrier: sickly green bloated core with dripping spore sacs
+          const pPulse = Math.sin(Date.now() * 0.009) * 3;
+          ctx.fillStyle = '#4d7c0f';
+          ctx.beginPath();
+          ctx.arc(0, 0, visualRadius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#84cc16';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, visualRadius + pPulse, 0, Math.PI * 2);
+          ctx.stroke();
+          // Spore sacs around the rim
+          ctx.fillStyle = '#a3e635';
+          for (let i = 0; i < 6; i++) {
+              const sa = (i / 6) * Math.PI * 2 + (Date.now() * 0.001);
+              ctx.beginPath();
+              ctx.arc(Math.cos(sa) * (visualRadius - 4), Math.sin(sa) * (visualRadius - 4), 4, 0, Math.PI * 2);
+              ctx.fill();
+          }
+      } else if (e.enemyType === 'FROST_TYRANT') {
+          // Blizzard tyrant: icy white-blue core with crystal shards orbiting
+          const fPulse = Math.sin(Date.now() * 0.01) * 3;
+          const fGrad = ctx.createRadialGradient(-2, -2, 0, 0, 0, visualRadius);
+          fGrad.addColorStop(0, '#e0f2fe');
+          fGrad.addColorStop(0.6, '#67e8f9');
+          fGrad.addColorStop(1, '#164e63');
+          ctx.fillStyle = fGrad;
+          ctx.beginPath();
+          ctx.arc(0, 0, visualRadius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#a5f3fc';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, visualRadius + fPulse, 0, Math.PI * 2);
+          ctx.stroke();
+          // Crystal shards
+          ctx.fillStyle = '#22d3ee';
+          for (let i = 0; i < 5; i++) {
+              const sa = (i / 5) * Math.PI * 2 + (Date.now() * 0.002);
+              ctx.beginPath();
+              ctx.moveTo(Math.cos(sa) * (visualRadius - 3), Math.sin(sa) * (visualRadius - 3));
+              ctx.lineTo(Math.cos(sa + 0.12) * (visualRadius + 9), Math.sin(sa + 0.12) * (visualRadius + 9));
+              ctx.lineTo(Math.cos(sa - 0.12) * (visualRadius + 9), Math.sin(sa - 0.12) * (visualRadius + 9));
+              ctx.closePath();
+              ctx.fill();
+          }
       } else if (e.isBoss) {
           const subtype = e.bossSubtype || 'WARRIOR';
           
@@ -1984,33 +2674,41 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
               // Menacing Oversized Heavy Dread Twin-Cannons!
               ctx.save();
               ctx.rotate(Math.atan2(engine.player.pos.y - e.pos.y, engine.player.pos.x - e.pos.x));
-              // Left Heavy Cannon
-              ctx.fillStyle = '#374151';
-              ctx.strokeStyle = '#f87171';
-              ctx.lineWidth = 2.5;
-              ctx.fillRect(visualRadius - 6, -34, 34, 14);
-              ctx.strokeRect(visualRadius - 6, -34, 34, 14);
-              // Left Cannon Muzzle glow
-              ctx.fillStyle = '#ef4444';
-              ctx.fillRect(visualRadius + 22, -32, 6, 10);
-              // Right Heavy Cannon
-              ctx.fillStyle = '#374151';
-              ctx.fillRect(visualRadius - 6, 20, 34, 14);
-              ctx.strokeRect(visualRadius - 6, 20, 34, 14);
-              // Right Cannon Muzzle glow
-              ctx.fillStyle = '#ef4444';
-              ctx.fillRect(visualRadius + 22, 22, 6, 10);
+              for (const side of [-1, 1]) {
+                  const cy0 = side < 0 ? -34 : 20;
+                  // Mount collar
+                  drawMetalPlate(ctx, visualRadius - 10, cy0 + 1, 14, 12, '#1f2937', shadeColor('#f87171', -0.2), 3);
+                  // Heavy cannon body, softly shaded to match the ball look
+                  drawMetalPlate(ctx, visualRadius - 6, cy0, 34, 14, '#374151', '#f87171', 3);
+                  // Barrel bore: dark recess with glowing muzzle ring
+                  ctx.fillStyle = '#0b0b10';
+                  ctx.beginPath();
+                  ctx.arc(visualRadius + 26, cy0 + 7, 4.2, 0, Math.PI * 2);
+                  ctx.fill();
+                  const mz = ctx.createRadialGradient(visualRadius + 27, cy0 + 7, 0, visualRadius + 27, cy0 + 7, 8);
+                  mz.addColorStop(0, 'rgba(239, 68, 68, 0.95)');
+                  mz.addColorStop(1, 'rgba(239, 68, 68, 0)');
+                  ctx.fillStyle = mz;
+                  ctx.beginPath();
+                  ctx.arc(visualRadius + 27, cy0 + 7, 8, 0, Math.PI * 2);
+                  ctx.fill();
+              }
               ctx.restore();
           } else if (subtype === 'TITAN') {
-              // Massive Heavy fortified Dread plates
-              ctx.fillStyle = '#0f172a';
+              // Massive Heavy fortified Dread plates with 3D bevel + rivets
+              ctx.save();
               for(let i=0; i<6; i++) {
                   ctx.rotate(Math.PI/3);
-                  ctx.fillRect(visualRadius - 8, -20, 30, 40);
-                  ctx.strokeStyle = '#f59e0b';
-                  ctx.lineWidth = 2.5;
-                  ctx.strokeRect(visualRadius - 8, -20, 30, 40);
+                  drawMetalPlate(ctx, visualRadius - 8, -20, 30, 40, '#1e293b', '#f59e0b', 4);
+                  // Soft amber accent line on the plate's outer face
+                  ctx.strokeStyle = 'rgba(245, 158, 11, 0.5)';
+                  ctx.lineWidth = 2;
+                  ctx.beginPath();
+                  ctx.moveTo(visualRadius + 6, -8);
+                  ctx.lineTo(visualRadius + 6, 8);
+                  ctx.stroke();
               }
+              ctx.restore();
           } else if (subtype === 'STORM_BRINGER') {
               // Crackling core & massive storm arcs
               ctx.strokeStyle = '#38bdf8';
@@ -2097,6 +2795,97 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
                   ctx.lineWidth = 2.5;
                   ctx.stroke();
               }
+          } else if (subtype === 'CHRONO_WARDEN') {
+              // Chrono warden: golden clockwork rings with rotating hour markers
+              ctx.strokeStyle = '#fbbf24';
+              ctx.lineWidth = 3;
+              const ringPulse = Math.sin(Date.now() * 0.006) * 4;
+              ctx.beginPath();
+              ctx.arc(0, 0, visualRadius * 0.85 + ringPulse, 0, Math.PI * 2);
+              ctx.stroke();
+              // Hour markers
+              ctx.fillStyle = '#fde68a';
+              for (let i = 0; i < 12; i++) {
+                  const ha = (i / 12) * Math.PI * 2 + (Date.now() * 0.0006);
+                  ctx.beginPath();
+                  ctx.arc(Math.cos(ha) * (visualRadius * 0.85), Math.sin(ha) * (visualRadius * 0.85), 3, 0, Math.PI * 2);
+                  ctx.fill();
+              }
+              // Giant sweeping hand
+              ctx.strokeStyle = '#fbbf24';
+              ctx.lineWidth = 3.5;
+              const handAng = Date.now() * 0.0025;
+              ctx.beginPath();
+              ctx.moveTo(0, 0);
+              ctx.lineTo(Math.cos(handAng) * visualRadius * 1.15, Math.sin(handAng) * visualRadius * 1.15);
+              ctx.stroke();
+          } else if (subtype === 'GRAVITON_CORE') {
+              // Graviton core: dark indigo mass with swirling accretion rings
+              const gGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, visualRadius * 1.1);
+              gGrad.addColorStop(0, '#000');
+              gGrad.addColorStop(0.65, '#1e1b4b');
+              gGrad.addColorStop(1, '#6366f1');
+              ctx.fillStyle = gGrad;
+              ctx.beginPath();
+              ctx.arc(0, 0, visualRadius * 1.05, 0, Math.PI * 2);
+              ctx.fill();
+              // Triple swirling accretion rings
+              ctx.strokeStyle = '#818cf8';
+              ctx.lineWidth = 2.5;
+              for (let r = 0; r < 3; r++) {
+                  ctx.beginPath();
+                  ctx.ellipse(0, 0, visualRadius * (0.5 + r * 0.28), visualRadius * (0.22 + r * 0.12), Date.now() * (0.001 + r * 0.0006), 0, Math.PI * 2);
+                  ctx.stroke();
+              }
+          } else if (subtype === 'PLAGUE_LORD') {
+              // Plague lord: massive bloated bile-green mass with pulsing boils
+              ctx.fillStyle = '#365314';
+              ctx.beginPath();
+              ctx.arc(0, 0, visualRadius, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = '#84cc16';
+              ctx.lineWidth = 3;
+              ctx.stroke();
+              // Pulsing boils
+              for (let i = 0; i < 8; i++) {
+                  const ba = (i / 8) * Math.PI * 2 + (Date.now() * 0.0008);
+                  const boilPulse = 5 + Math.sin(Date.now() * 0.01 + i) * 2.5;
+                  ctx.fillStyle = '#a3e635';
+                  ctx.beginPath();
+                  ctx.arc(Math.cos(ba) * (visualRadius * 0.65), Math.sin(ba) * (visualRadius * 0.65), boilPulse, 0, Math.PI * 2);
+                  ctx.fill();
+              }
+          } else if (subtype === 'CRYO_SOVEREIGN') {
+              // Cryo sovereign: glacial crystal fortress with orbiting ice shards
+              const cGrad = ctx.createRadialGradient(-4, -4, 0, 0, 0, visualRadius);
+              cGrad.addColorStop(0, '#e0f2fe');
+              cGrad.addColorStop(0.55, '#67e8f9');
+              cGrad.addColorStop(1, '#0e7490');
+              ctx.fillStyle = cGrad;
+              ctx.beginPath();
+              ctx.arc(0, 0, visualRadius, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = '#a5f3fc';
+              ctx.lineWidth = 3;
+              ctx.stroke();
+              // Hexagonal ice facets
+              ctx.strokeStyle = 'rgba(224, 242, 254, 0.6)';
+              ctx.lineWidth = 2;
+              for (let i = 0; i < 6; i++) {
+                  const fa = (i / 6) * Math.PI * 2 + (Date.now() * 0.0004);
+                  ctx.beginPath();
+                  ctx.moveTo(0, 0);
+                  ctx.lineTo(Math.cos(fa) * visualRadius * 0.92, Math.sin(fa) * visualRadius * 0.92);
+                  ctx.stroke();
+              }
+              // Orbiting shards
+              ctx.fillStyle = '#22d3ee';
+              for (let i = 0; i < 6; i++) {
+                  const sa = (i / 6) * Math.PI * 2 + (Date.now() * 0.0015);
+                  ctx.beginPath();
+                  ctx.arc(Math.cos(sa) * (visualRadius + 16), Math.sin(sa) * (visualRadius + 16), 5, 0, Math.PI * 2);
+                  ctx.fill();
+              }
           } else if (subtype === 'NEXUS_OVERLORD') {
               // Giant doom machine visual: dark metallic hexagonal core with hyper-glowing cyber design
               ctx.fillStyle = '#1e1b4b'; // deep violet-indigo hull
@@ -2127,57 +2916,112 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
                   const ang = (i / 4) * Math.PI * 2 - (Date.now() * 0.0015);
                   const tx = Math.cos(ang) * (visualRadius + 15);
                   const ty = Math.sin(ang) * (visualRadius + 15);
-                  ctx.fillStyle = '#3f3f46';
+                  // Shaded dome turret base
+                  const dome = ctx.createRadialGradient(tx - 4, ty - 4, 1, tx, ty, 13);
+                  dome.addColorStop(0, '#a1a1aa');
+                  dome.addColorStop(0.55, '#52525b');
+                  dome.addColorStop(1, '#18181b');
+                  ctx.fillStyle = dome;
                   ctx.beginPath();
                   ctx.arc(tx, ty, 12, 0, Math.PI * 2);
                   ctx.fill();
                   ctx.strokeStyle = '#ef4444';
                   ctx.lineWidth = 1.5;
                   ctx.stroke();
-                  // Barrel
+                  // Twin barrel block aimed outward
                   ctx.save();
                   ctx.translate(tx, ty);
                   ctx.rotate(ang + Math.PI);
-                  ctx.fillStyle = '#18181b';
-                  ctx.fillRect(0, -3, 15, 6);
+                  drawMetalPlate(ctx, 0, -5, 16, 10, '#27272a', '#3f3f46', 2);
+                  ctx.fillStyle = '#ef4444';
+                  ctx.fillRect(14, -4, 2.5, 3);
+                  ctx.fillRect(14, 1, 2.5, 3);
                   ctx.restore();
               }
           }
 
-          // Shared: Boss eyes/core
+          // Shared: Single big center eye that always tracks the player
+          const eyeR = Math.max(12, visualRadius * 0.62);
+          const trackAng = Math.atan2(pPos.y - e.pos.y, pPos.x - e.pos.x);
+          // Sclera: deep socket with a subtle inner depth ring so it reads recessed
           ctx.fillStyle = '#000';
           ctx.beginPath();
-          ctx.arc(-visualRadius/3, -visualRadius/4, visualRadius/6, 0, Math.PI * 2);
-          ctx.arc(visualRadius/3, -visualRadius/4, visualRadius/6, 0, Math.PI * 2);
+          ctx.arc(0, 0, eyeR, 0, Math.PI * 2);
           ctx.fill();
-          
-          ctx.fillStyle = e.color;
+          ctx.strokeStyle = shadeColor(e.color, -0.7);
+          ctx.lineWidth = Math.max(1.5, eyeR * 0.08);
           ctx.beginPath();
-          ctx.arc(-visualRadius/3, -visualRadius/4, visualRadius/12, 0, Math.PI * 2);
-          ctx.arc(visualRadius/3, -visualRadius/4, visualRadius/12, 0, Math.PI * 2);
+          ctx.arc(0, 0, eyeR - ctx.lineWidth * 0.5, 0, Math.PI * 2);
+          ctx.stroke();
+          // Layered gaze: the black pupil locks on instantly and stretches
+          // toward you with distance; the colored iris follows the same motion
+          // but delayed and gentler, since it is the bigger, heavier layer.
+          const prevGaze = e.eyeGaze ?? trackAng;
+          let gazeDelta = trackAng - prevGaze;
+          while (gazeDelta > Math.PI) gazeDelta -= Math.PI * 2;
+          while (gazeDelta < -Math.PI) gazeDelta += Math.PI * 2;
+          const irisAng = prevGaze + gazeDelta * 0.08; // smoothed, lagging follow
+          e.eyeGaze = irisAng;
+
+          const gazeDist = Math.hypot(pPos.x - e.pos.x, pPos.y - e.pos.y);
+          const gazeReach = Math.min(1, gazeDist / 500) * 0.65 + 0.35; // farther = looks harder
+
+          // Iris (colored): delayed, softer drift toward the player
+          const irisR = eyeR * 0.62;
+          const irisOff = eyeR * 0.22 * gazeReach;
+          const irisX = Math.cos(irisAng) * irisOff;
+          const irisY = Math.sin(irisAng) * irisOff;
+          const irisGrad = ctx.createRadialGradient(
+            irisX + Math.cos(irisAng) * irisR * 0.4, irisY + Math.sin(irisAng) * irisR * 0.4, irisR * 0.15,
+            irisX, irisY, irisR
+          );
+          irisGrad.addColorStop(0, shadeColor(e.color, 0.35));
+          irisGrad.addColorStop(0.6, e.color);
+          irisGrad.addColorStop(1, shadeColor(e.color, -0.55));
+          ctx.fillStyle = irisGrad;
+          ctx.beginPath();
+          ctx.arc(irisX, irisY, irisR, 0, Math.PI * 2);
+          ctx.fill();
+          // Iris fibers: thin radial spokes for organic texture
+          ctx.strokeStyle = shadeColor(e.color, -0.45);
+          ctx.lineWidth = Math.max(1, eyeR * 0.045);
+          ctx.beginPath();
+          for (let f = 0; f < 10; f++) {
+            const fa = (f / 10) * Math.PI * 2 + irisAng;
+            ctx.moveTo(irisX + Math.cos(fa) * irisR * 0.55, irisY + Math.sin(fa) * irisR * 0.55);
+            ctx.lineTo(irisX + Math.cos(fa) * irisR * 0.92, irisY + Math.sin(fa) * irisR * 0.92);
+          }
+          ctx.stroke();
+          // Pupil: the free-moving black core, always locked on you and
+          // pushing further out the farther away you are
+          const pupilR = irisR * 0.52;
+          const pupilOff = eyeR * 0.34 * gazeReach;
+          const pupilX = Math.cos(trackAng) * pupilOff;
+          const pupilY = Math.sin(trackAng) * pupilOff;
+          const pupilGrad = ctx.createRadialGradient(pupilX, pupilY, pupilR * 0.2, pupilX, pupilY, pupilR);
+          pupilGrad.addColorStop(0, '#1a1024');
+          pupilGrad.addColorStop(1, '#000');
+          ctx.fillStyle = pupilGrad;
+          ctx.beginPath();
+          ctx.arc(pupilX, pupilY, pupilR, 0, Math.PI * 2);
           ctx.fill();
       }
       ctx.restore();
 
-      // Enemy ID/Text (Artistic Flair flair)
-      ctx.fillStyle = '#fff';
-      const fontSize = isBoss ? 16 : 9;
-      ctx.font = `bold ${fontSize}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText(`${Math.ceil(e.hp/10)}`, 0, fontSize / 3);
+      if (!isBoss) {
+        // HP Bar (Sleek line): bosses use the dedicated top health bar instead
+        const hpWidth = (e.hp / e.maxHp) * e.radius * 2;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.fillRect(-e.radius, -e.radius - 8, e.radius * 2, 2);
+        ctx.fillStyle = '#e11d48';
+        ctx.fillRect(-e.radius, -e.radius - 8, hpWidth, 2);
 
-      // HP Bar (Sleek line)
-      const hpWidth = (e.hp / e.maxHp) * e.radius * 2;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.fillRect(-e.radius, -e.radius - 8, e.radius * 2, 2);
-      ctx.fillStyle = '#e11d48';
-      ctx.fillRect(-e.radius, -e.radius - 8, hpWidth, 2);
-      
-      // Shield HP bar
-      if (e.maxShieldHp && e.maxShieldHp > 0) {
-          const sHpWidth = (e.shieldHp! / e.maxShieldHp) * e.radius * 2;
-          ctx.fillStyle = '#0ea5e9';
-          ctx.fillRect(-e.radius, -e.radius - 12, sHpWidth, 2);
+        // Shield HP bar
+        if (e.maxShieldHp && e.maxShieldHp > 0) {
+            const sHpWidth = (e.shieldHp! / e.maxShieldHp) * e.radius * 2;
+            ctx.fillStyle = '#0ea5e9';
+            ctx.fillRect(-e.radius, -e.radius - 12, sHpWidth, 2);
+        }
       }
 
       ctx.restore();
@@ -2529,158 +3373,33 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
     }
 
     const skinId = localStorage.getItem('game_equipped_skin') || 'classic';
-    const auraId = localStorage.getItem('game_equipped_aura') || 'none';
+    const skin = getSkinById(skinId);
 
-    // Skins styling
-    let coreFill = '#06b6d4';
-    let coreStroke = '#22d3ee';
-    let trailGlow = '#06b6d4';
+    // Skins styling (from central registry)
+    const coreFill = skin?.color ?? '#06b6d4';
+    const coreStroke = skin?.stroke ?? '#22d3ee';
 
-    if (skinId === 'vibrant_cyan') {
-      coreFill = '#22d3ee';
-      coreStroke = '#e0f2fe';
-      trailGlow = '#06b6d4';
-    } else if (skinId === 'gilded_gold') {
-      coreFill = '#facc15';
-      coreStroke = '#fef08a';
-      trailGlow = '#ca8a04';
-    } else if (skinId === 'neon_magenta') {
-      coreFill = '#ec4899';
-      coreStroke = '#fbcfe8';
-      trailGlow = '#db2777';
-    } else if (skinId === 'void_eclipse') {
-      coreFill = '#1e1b4b';
-      coreStroke = '#c084fc';
-      trailGlow = '#a855f7';
-    } else if (skinId === 'omega_god') {
-      coreFill = '#dc2626';
-      coreStroke = '#fca5a5';
-      trailGlow = '#dc2626';
-    } else if (skinId === 'emerald_green') {
-      coreFill = '#10b981';
-      coreStroke = '#a7f3d0';
-      trailGlow = '#059669';
-    } else if (skinId === 'crimson_death') {
-      coreFill = '#b91c1c';
-      coreStroke = '#fee2e2';
-      trailGlow = '#991b1b';
-    } else if (skinId === 'matrix_hologram') {
-      coreFill = '#15803d';
-      coreStroke = '#86efac';
-      trailGlow = '#16a34a';
-    } else if (skinId === 'snow_white') {
-      coreFill = '#ffffff';
-      coreStroke = '#cbd5e1';
-      trailGlow = '#cbd5e1';
-    } else if (skinId === 'rich_platinum') {
-      coreFill = '#cbd5e1';
-      coreStroke = '#f8fafc';
-      trailGlow = '#94a3b8';
-    } else if (skinId === 'deep_obsidian') {
-      coreFill = '#0f172a';
-      coreStroke = '#818cf8';
-      trailGlow = '#6366f1';
-    } else if (skinId === 'inferno_orange') {
-      coreFill = '#f97316';
-      coreStroke = '#ffedd5';
-      trailGlow = '#ea580c';
-    } else if (skinId === 'chrono_glow') {
-      coreFill = '#3b82f6';
-      coreStroke = '#bfdbfe';
-      trailGlow = '#1d4ed8';
+    if (settings.gfxEnemyDetail && p.hurtTimer <= 0 && !bloodLust) {
+      // Enhanced 3D-shaded ball matching the enemy detail look (skin colors, own rim/core)
+      drawEnemyBody(ctx, coreFill, p.radius, false, 1, p.pos.x, p.pos.y);
+    } else {
+      ctx.fillStyle = p.hurtTimer > 0 ? '#ef4444' : (bloodLust ? '#991b1b' : coreFill);
     }
-
-    // Render Auras immediately beneath the player circle
-    if (auraId === 'amethyst_aura') {
-      ctx.save();
-      ctx.strokeStyle = 'rgba(192, 132, 252, 0.6)';
-      ctx.lineWidth = 1.5;
-      const t = Date.now() * 0.003;
-      for (let i = 0; i < 3; i++) {
-        const angle = t + (i * Math.PI * 2 / 3);
-        const r = p.radius + 15;
-        const x = p.pos.x + Math.cos(angle) * r;
-        const y = p.pos.y + Math.sin(angle) * r;
-        ctx.beginPath();
-        ctx.moveTo(x, y - 5);
-        ctx.lineTo(x + 4, y);
-        ctx.lineTo(x, y + 5);
-        ctx.lineTo(x - 4, y);
-        ctx.closePath();
-        ctx.fillStyle = '#c084fc';
-        ctx.fill();
-        ctx.stroke();
-      }
-      ctx.restore();
-    } else if (auraId === 'overcharged_sparks') {
-      ctx.save();
-      if (Math.random() < 0.25) {
-        ctx.strokeStyle = '#fb923c';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        const ang = Math.random() * Math.PI * 2;
-        const startR = p.radius;
-        const endR = p.radius + 10 + Math.random() * 15;
-        ctx.moveTo(p.pos.x + Math.cos(ang) * startR, p.pos.y + Math.sin(ang) * startR);
-        const midR = (startR + endR) / 2;
-        const midAng = ang + (Math.random() - 0.5) * 0.4;
-        ctx.lineTo(p.pos.x + Math.cos(midAng) * midR, p.pos.y + Math.sin(midAng) * midR);
-        ctx.lineTo(p.pos.x + Math.cos(ang) * endR, p.pos.y + Math.sin(ang) * endR);
-        ctx.stroke();
-      }
-      ctx.restore();
-    } else if (auraId === 'solar_flare') {
-      ctx.save();
-      const pulseRatio = 0.5 + Math.sin(Date.now() * 0.01) * 0.5;
-      const rad = p.radius + 10 + pulseRatio * 6;
-      ctx.strokeStyle = 'rgba(245, 158, 11, 0.6)';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(p.pos.x, p.pos.y, rad, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    } else if (auraId === 'vortex_trail') {
-      ctx.save();
-      ctx.strokeStyle = 'rgba(129, 140, 248, 0.45)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      const baseAng = Date.now() * 0.005;
-      for (let i = 0; i < 20; i++) {
-        const factor = i / 20;
-        const rLen = p.radius * (1.3 - factor * 0.5);
-        const ang = baseAng + factor * Math.PI * 1.5;
-        const px = p.pos.x + Math.cos(ang) * rLen;
-        const py = p.pos.y + Math.sin(ang) * rLen;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.stroke();
-      ctx.restore();
-    } else if (auraId === 'void_particle') {
-      ctx.save();
-      const speed = Math.hypot(p.vel.x, p.vel.y);
-      if (speed > 10) {
-        const dx = p.vel.x / speed;
-        const dy = p.vel.y / speed;
-        for (let i = 1; i <= 3; i++) {
-          const dist = i * 12;
-          const alpha = 0.4 / i;
-          ctx.beginPath();
-          ctx.arc(p.pos.x - dx * dist, p.pos.y - dy * dist, p.radius - i * 2, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(168, 85, 247, ${alpha})`;
-          ctx.fill();
-        }
-      }
-      ctx.restore();
-    }
-
-    ctx.fillStyle = p.hurtTimer > 0 ? '#ef4444' : (bloodLust ? '#991b1b' : coreFill);
     ctx.strokeStyle = p.hurtTimer > 0 ? '#fca5a5' : (bloodLust ? '#fca5a5' : coreStroke);
     ctx.lineWidth = 4;
+    if (!(settings.gfxEnemyDetail && p.hurtTimer <= 0 && !bloodLust)) {
+      ctx.beginPath();
+      ctx.arc(p.pos.x, p.pos.y, p.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.beginPath();
     ctx.arc(p.pos.x, p.pos.y, p.radius, 0, Math.PI * 2);
-    ctx.fill();
     ctx.stroke();
+
+    // Unique skin pattern overlays (drawn on top of the ball)
+    if (!p.hurtTimer || p.hurtTimer <= 0) {
+      drawSkinPattern(ctx, skin, p.pos.x, p.pos.y, p.radius);
+    }
 
     // Spawn Forcefield Visual Option (Fades away gently after 1s over 0.5s)
     if (p.spawnShieldTimer !== undefined && p.spawnShieldTimer > -0.5) {
@@ -3027,200 +3746,6 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
         }
       }
       
-      if (w.type === WeaponType.AUTO_TURRET || w.type === WeaponType.RAIL_GUN || w.type === WeaponType.OMEGA_BEAM) {
-          const isUlt = w.type === WeaponType.OMEGA_BEAM;
-          const isEvo = w.type === WeaponType.RAIL_GUN;
-          
-          const orbitRadius = 38 + (w.level * 1.5);
-          const orbitAngle = w.angle || 0;
-          const compX = p.pos.x + Math.cos(orbitAngle) * orbitRadius;
-          const compY = p.pos.y + Math.sin(orbitAngle) * orbitRadius;
-
-          if (isUlt) {
-              const pulse = Math.sin(Date.now() * 0.05);
-              ctx.fillStyle = `rgba(56, 189, 248, ${0.1 + pulse * 0.05})`;
-              ctx.beginPath();
-              // Ultra heavy aura around the companion drone
-              ctx.arc(compX, compY, 45, 0, Math.PI * 2);
-              ctx.fill();
-
-              // Big passive shield pulse indicator range
-              ctx.strokeStyle = 'rgba(14, 165, 233, 0.05)';
-              ctx.beginPath();
-              ctx.arc(p.pos.x, p.pos.y, 400, 0, Math.PI * 2);
-              ctx.stroke();
-          }
-
-          // 1. Draw the "weird turret thing connecting to them" -> the energy/mechanical connection tether link!
-          ctx.save();
-          if (isUlt) {
-              // Ultra hot plasma linking channel
-              ctx.strokeStyle = '#0ea5e9';
-              ctx.lineWidth = 3;
-              ctx.beginPath();
-              ctx.moveTo(p.pos.x, p.pos.y);
-              ctx.lineTo(compX, compY);
-              ctx.stroke();
-
-              // Glowing inner core core
-              ctx.strokeStyle = '#ffffff';
-              ctx.lineWidth = 1;
-              ctx.stroke();
-          } else if (isEvo) {
-              // Railgun dual cyber guide bars
-              ctx.strokeStyle = '#38bdf8';
-              ctx.lineWidth = 1;
-              ctx.save();
-              ctx.translate(p.pos.x, p.pos.y);
-              ctx.rotate(orbitAngle);
-              ctx.beginPath();
-              ctx.moveTo(0, -3);
-              ctx.lineTo(orbitRadius, -3);
-              ctx.moveTo(0, 3);
-              ctx.lineTo(orbitRadius, 3);
-              ctx.stroke();
-              ctx.restore();
-          } else {
-              // Basic solid sleek mechanical connection rod
-              ctx.strokeStyle = 'rgba(125, 211, 252, 0.45)';
-              ctx.lineWidth = 1.6;
-              ctx.beginPath();
-              ctx.moveTo(p.pos.x, p.pos.y);
-              ctx.lineTo(compX, compY);
-              ctx.stroke();
-          }
-          ctx.restore();
-
-          // 2. Draw the Companion Drone Hull with three stages!
-          ctx.save();
-          ctx.translate(compX, compY);
-          
-          // Face the nearest target enemy or rotate elegantly
-          const target = engine.getNearestEnemy();
-          const targetAngle = target ? Math.atan2(target.pos.y - compY, target.pos.x - compX) : (orbitAngle + Math.PI / 2);
-          ctx.rotate(targetAngle);
-
-          if (isUlt) {
-              // --- Stage 3: Omega Beam Companion (Heavy Triangular design) ---
-              // Heavy triangular base polygon
-              ctx.fillStyle = '#1e293b';
-              ctx.strokeStyle = '#0284c7';
-              ctx.lineWidth = 2.5;
-              ctx.beginPath();
-              ctx.moveTo(12, 0);
-              ctx.lineTo(-10, -11);
-              ctx.lineTo(-6, 0);
-              ctx.lineTo(-10, 11);
-              ctx.closePath();
-              ctx.fill();
-              ctx.stroke();
-
-              // Dual massive charging capacitors (polygons) on side wings
-              ctx.fillStyle = '#0f172a';
-              ctx.strokeStyle = '#38bdf8';
-              ctx.lineWidth = 1.2;
-              ctx.beginPath();
-              ctx.moveTo(-4, -13);
-              ctx.lineTo(2, -13);
-              ctx.lineTo(5, -8);
-              ctx.lineTo(-1, -8);
-              ctx.closePath();
-              ctx.fill();
-              ctx.stroke();
-
-              ctx.beginPath();
-              ctx.moveTo(-4, 13);
-              ctx.lineTo(2, 13);
-              ctx.lineTo(5, 8);
-              ctx.lineTo(-1, 8);
-              ctx.closePath();
-              ctx.fill();
-              ctx.stroke();
-
-              // Big glowing lens barrel at tip
-              ctx.fillStyle = '#06b6d4';
-              ctx.fillRect(10, -3.5, 8, 7);
-              ctx.strokeStyle = '#ffffff';
-              ctx.strokeRect(10, -3.5, 8, 7);
-
-              // Pulse particle core in center
-              const cPulse = Math.abs(Math.sin(Date.now() * 0.04)) * 3;
-              ctx.fillStyle = '#ffffff';
-              ctx.beginPath();
-              ctx.arc(-1, 0, 2.5 + cPulse, 0, Math.PI * 2);
-              ctx.fill();
-
-              // Specular map-clearing continuous indicator beam from lens output (X = 18)
-              ctx.save();
-              ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
-              ctx.lineWidth = 8 + Math.sin(Date.now() * 0.1) * 3;
-              ctx.beginPath();
-              ctx.moveTo(18, 0);
-              ctx.lineTo(350, 0);
-              ctx.stroke();
-              // Inner core
-              ctx.strokeStyle = '#ffffff';
-              ctx.lineWidth = 2;
-              ctx.stroke();
-              ctx.restore();
-
-          } else if (isEvo) {
-              // --- Stage 2: Railgun Companion (Symmetric dual rails / Hexagonal form) ---
-              // Hexagonal core
-              ctx.fillStyle = '#0f172a';
-              ctx.strokeStyle = '#38bdf8';
-              ctx.lineWidth = 1.8;
-              ctx.beginPath();
-              ctx.moveTo(8, -5);
-              ctx.lineTo(8, 5);
-              ctx.lineTo(0, 9);
-              ctx.lineTo(-8, 5);
-              ctx.lineTo(-8, -5);
-              ctx.lineTo(0, -9);
-              ctx.closePath();
-              ctx.fill();
-              ctx.stroke();
-
-              // Dual futuristic long barrel rails
-              ctx.fillStyle = '#334155';
-              ctx.strokeStyle = '#ffffff';
-              ctx.lineWidth = 1;
-              ctx.fillRect(3, -5, 12, 3);
-              ctx.strokeRect(3, -5, 12, 3);
-              ctx.fillRect(3, 2, 12, 3);
-              ctx.strokeRect(3, 2, 12, 3);
-
-              // Blue capacitor core
-              ctx.fillStyle = '#0ea5e9';
-              ctx.beginPath();
-              ctx.arc(-2, 0, 3, 0, Math.PI * 2);
-              ctx.fill();
-
-          } else {
-              // --- Stage 1: Auto Turret Companion (Classic circular drone) ---
-              // Smooth circular base hull (like the titlescreen)
-              ctx.fillStyle = '#1e1b4b';
-              ctx.strokeStyle = '#7dd3fc';
-              ctx.lineWidth = 1.5;
-              ctx.beginPath();
-              ctx.arc(0, 0, 6.5, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.stroke();
-
-              // Single forward laser barrel block
-              ctx.fillStyle = '#475569';
-              ctx.fillRect(5, -2.5, 7, 5);
-              ctx.strokeStyle = '#ffffff';
-              ctx.strokeRect(5, -2.5, 7, 5);
-
-              // Small cyan glass dome core
-              ctx.fillStyle = '#38bdf8';
-              ctx.beginPath();
-              ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
-              ctx.fill();
-          }
-          ctx.restore();
-      }
 
       if (w.type === WeaponType.CHAIN_ARC_SWORD || w.type === WeaponType.ARC_WHIP || w.type === WeaponType.THUNDER_GOD) {
         const isEvo = w.type === WeaponType.ARC_WHIP;
@@ -3725,13 +4250,15 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
           }
           ctx.restore();
           
-          // Thicker Tether
+          // Thicker Tether (trimmed: starts at the player's hull edge, ends short of the razor)
+          const tetherAng = Math.atan2(razorPos.y - p.pos.y, razorPos.x - p.pos.x);
+          const tetherGap = 14;
           ctx.strokeStyle = isUlt ? 'rgba(239, 68, 68, 0.3)' : 'rgba(255, 255, 255, 0.15)';
           ctx.lineWidth = isUlt ? 3 : 1;
           ctx.setLineDash(isUlt ? [] : [5, 5]);
           ctx.beginPath();
-          ctx.moveTo(p.pos.x, p.pos.y);
-          ctx.lineTo(razorPos.x, razorPos.y);
+          ctx.moveTo(p.pos.x + Math.cos(tetherAng) * (p.radius + 2), p.pos.y + Math.sin(tetherAng) * (p.radius + 2));
+          ctx.lineTo(razorPos.x - Math.cos(tetherAng) * tetherGap, razorPos.y - Math.sin(tetherAng) * tetherGap);
           ctx.stroke();
           ctx.setLineDash([]);
       }
@@ -3826,12 +4353,13 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
           }
           ctx.restore();
 
-          // Draw icy link
+          // Draw icy link (trimmed: starts at the player's hull edge, ends at the sword hilt)
+          const iceLinkAng = Math.atan2(swordPos.y - p.pos.y, swordPos.x - p.pos.x);
           ctx.strokeStyle = isUlt ? 'rgba(224, 242, 254, 0.45)' : (isEvo ? 'rgba(14, 165, 233, 0.3)' : 'rgba(56, 189, 248, 0.25)');
           ctx.lineWidth = isUlt ? 2.5 : 1.5;
           ctx.beginPath();
-          ctx.moveTo(p.pos.x, p.pos.y);
-          ctx.lineTo(swordPos.x, swordPos.y);
+          ctx.moveTo(p.pos.x + Math.cos(iceLinkAng) * (p.radius + 2), p.pos.y + Math.sin(iceLinkAng) * (p.radius + 2));
+          ctx.lineTo(swordPos.x - Math.cos(iceLinkAng) * 24, swordPos.y - Math.sin(iceLinkAng) * 24);
           ctx.stroke();
       }
 
@@ -3903,12 +4431,13 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
 
           ctx.restore();
 
-          // Thermal link
+          // Thermal link (trimmed: starts at the player's hull edge, ends at the sword hilt)
+          const fireLinkAng = Math.atan2(swordPos.y - p.pos.y, swordPos.x - p.pos.x);
           ctx.strokeStyle = isUlt ? 'rgba(254, 240, 138, 0.4)' : (isEvo ? 'rgba(249, 115, 22, 0.3)' : 'rgba(239, 68, 68, 0.25)');
           ctx.lineWidth = isUlt ? 2.5 : 1.5;
           ctx.beginPath();
-          ctx.moveTo(p.pos.x, p.pos.y);
-          ctx.lineTo(swordPos.x, swordPos.y);
+          ctx.moveTo(p.pos.x + Math.cos(fireLinkAng) * (p.radius + 2), p.pos.y + Math.sin(fireLinkAng) * (p.radius + 2));
+          ctx.lineTo(swordPos.x - Math.cos(fireLinkAng) * 24, swordPos.y - Math.sin(fireLinkAng) * 24);
           ctx.stroke();
       }
 
@@ -4306,14 +4835,14 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
   };
 
   return (
-    <div className={`relative w-full h-full flex items-center justify-center p-1 sm:p-2 ${settings.retroTheme ? 'retro-viewport' : ''}`}>
+    <div className={`relative w-full h-full flex items-center justify-center ${settings.retroTheme ? 'retro-viewport' : ''}`}>
       <canvas
         ref={canvasRef}
         id="game-canvas"
         width={engine.width}
         height={engine.height}
         style={{ aspectRatio: '800 / 500' }}
-        className={`rounded-xl border border-zinc-700/50 ${settings.retroTheme ? 'border-amber-500/80 shadow-[0_0_35px_rgba(245,158,11,0.25)] bg-[#030306]' : 'shadow-2xl shadow-cyan-500/10 bg-[#030308]'} w-full h-full max-w-full max-h-full object-contain transition-all ${
+        className={`${settings.retroTheme ? 'shadow-[0_0_35px_rgba(245,158,11,0.25)] bg-[#030306]' : 'shadow-2xl shadow-cyan-500/10 bg-[#020205]'} w-full h-full max-w-full max-h-full object-contain transition-all ${
           (engine.gameMode === 'OVERDRIVE' || engine.gameMode === 'OVERDRIVE_SANDBOX') ? 'cursor-crosshair' : 'cursor-default'
         } touch-none`}
         onPointerDown={handlePointerDown}

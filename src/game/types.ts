@@ -239,8 +239,8 @@ export interface Weapon {
 
 export interface EnemyBall extends Entity {
   type: EntityType.ENEMY_BALL;
-  enemyType: 'BASIC' | 'SHOOTER' | 'SPLITTER' | 'TANK' | 'SHIELDED' | 'GUNNER' | 'BOMBER' | 'SWARMER' | 'PHANTOM' | 'TESLA_COIL' | 'GRAVITY_DRAIN' | 'MIRAGE' | 'CRYOMANCER' | 'STALKER' | 'HEALER' | 'WARP_WARLOCK' | 'PLASMA_STORMER' | 'BIO_LEECH' | 'BOSS' | 'ULTRA_BOSS';
-  bossSubtype?: 'WARRIOR' | 'TITAN' | 'SWARM_QUEEN' | 'PHANTOM_ACE' | 'VOID_SENTINEL' | 'STORM_BRINGER' | 'ARCHITECT' | 'REAPER' | 'NEXUS_OVERLORD';
+  enemyType: 'BASIC' | 'SHOOTER' | 'SPLITTER' | 'TANK' | 'SHIELDED' | 'GUNNER' | 'BOMBER' | 'SWARMER' | 'PHANTOM' | 'TESLA_COIL' | 'GRAVITY_DRAIN' | 'MIRAGE' | 'CRYOMANCER' | 'STALKER' | 'HEALER' | 'WARP_WARLOCK' | 'PLASMA_STORMER' | 'BIO_LEECH' | 'VOID_MARAUDER' | 'TIME_EATER' | 'SINGULARITY_SEED' | 'PLAGUE_SPREADER' | 'FROST_TYRANT' | 'BOSS' | 'ULTRA_BOSS';
+  bossSubtype?: 'WARRIOR' | 'TITAN' | 'SWARM_QUEEN' | 'PHANTOM_ACE' | 'VOID_SENTINEL' | 'STORM_BRINGER' | 'ARCHITECT' | 'REAPER' | 'NEXUS_OVERLORD' | 'CHRONO_WARDEN' | 'GRAVITON_CORE' | 'PLAGUE_LORD' | 'CRYO_SOVEREIGN';
   lastShot?: number;
   shieldHp?: number;
   maxShieldHp?: number;
@@ -270,6 +270,19 @@ export interface EnemyBall extends Entity {
   stunTimer?: number;
   attackCooldown?: number;
   armorShred?: number;
+
+  // Boss eye tracking state (rendering only)
+  eyeGaze?: number;
+  // Void Marauder: blink (short teleport) cooldown
+  blinkCooldown?: number;
+  // Time Eater: temporal field aura timer
+  timeAuraTimer?: number;
+  // Singularity Seed: collapse countdown (explodes into a black hole)
+  collapseTimer?: number;
+  // Plague Spreader: contagion pulse timer
+  plagueTimer?: number;
+  // Frost Tyrant: blizzard burst timer
+  blizzardTimer?: number;
 }
 
 export interface Projectile {

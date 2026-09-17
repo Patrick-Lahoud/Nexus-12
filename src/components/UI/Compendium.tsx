@@ -6,7 +6,7 @@ import {
   X, Book, Target, ChevronRight, Sparkles, Wand2, Bomb, Users, Droplet, Wind, Maximize, 
   Flame, CloudLightning, Disc, Radio, Boxes, Loader, Sun, ShieldPlus, Shield, Activity, 
   Cpu, RadioTower, Infinity as InfinityIcon, Zap as ZapIcon, CircuitBoard, Heart, 
-  Crosshair, Swords, Layers, Plus, Minus, Trash2, ArrowUpCircle, Check
+  Crosshair, Swords, Plus, Minus, Trash2, ArrowUpCircle, Check
 } from 'lucide-react';
 import { gameAudio } from '../../game/audio.ts';
 import { useLanguage } from '../../game/localization';
@@ -45,7 +45,7 @@ export function Compendium({
   onMaxAllWeapons
 }: CompendiumProps) {
   const { t } = useLanguage();
-  const [activeCategory, setActiveCategory] = useState<'ALL' | 'LOADOUT' | 'WEAPONS' | 'ABILITIES' | 'STATS'>('ALL');
+  const [activeCategory, setActiveCategory] = useState<'LOADOUT' | 'WEAPONS' | 'ABILITIES' | 'STATS'>('LOADOUT');
 
   const getIcon = (upgrade: Upgrade) => {
     if (upgrade.type === 'WEAPON') {
@@ -452,7 +452,7 @@ export function Compendium({
 
         {/* Expandable Body (Expands ONLY when hovered) */}
         <div className="max-h-0 opacity-0 group-hover:max-h-[300px] group-hover:opacity-100 group-hover:mt-2 transition-all duration-300 ease-in-out overflow-hidden w-full select-text">
-          <p className="text-xs text-zinc-300 mt-1 leading-relaxed border-t border-zinc-800/60 pt-2 font-sans">
+          <p className="text-xs text-zinc-300 mt-1 leading-relaxed border-t border-zinc-800/60 pt-2">
             {t('up_desc_' + upgrade.id, {}, upgrade.description)}
           </p>
           
@@ -466,7 +466,7 @@ export function Compendium({
 
           {evolutionOverloads?.ultimate && (
             <div className="mt-2 text-xs font-mono text-amber-400 bg-amber-950/60 px-2 py-1 rounded-md border border-amber-800/40 inline-block font-bold">
-              {t('god_engine_at_level_label', {}, 'GOD-ENGINE AT LEVEL')} {evolutionOverloads.ultimate.evolutionLevel || 15}
+              {t('god_engine_at_level_label', {}, 'ULTIMATE AT LEVEL')} {evolutionOverloads.ultimate.evolutionLevel || 15}
             </div>
           )}
 
@@ -574,42 +574,27 @@ export function Compendium({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.97 }}
         transition={{ duration: 0.15 }}
-        className="relative w-full max-w-6xl h-[92vh] sm:h-[88vh] space-ui-bg border-2 border-amber-500/40 rounded-2xl shadow-[0_0_50px_rgba(245,158,11,0.25)] flex flex-col overflow-hidden"
+        className="relative w-full max-w-6xl h-[94vh] sm:h-[92vh] bg-[#040404] border-[6px] border-zinc-800 rounded-xl shadow-[0_0_90px_rgba(0,0,0,0.95),inset_0_0_80px_rgba(0,0,0,0.55)] flex flex-col overflow-hidden"
       >
-        {/* Decorative Grid Lines */}
-        <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1.2px,transparent_1.2px)] [background-size:18px_18px] opacity-20 pointer-events-none" />
-
         {/* Top Header */}
-        <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-zinc-800/80 bg-zinc-950/80 shrink-0">
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-amber-500/15 bg-black/70 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-950/60 border border-amber-500/40 rounded-xl text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)]">
-              <Book size={24} className="animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-sans font-black text-white uppercase tracking-wider text-xl">
-                  {t('compendium', {}, 'Compendium')}
-                </h2>
-                {isSandbox && (
-                  <span className="px-2 py-0.5 text-xs bg-cyan-950/80 text-cyan-300 border border-cyan-400/40 rounded font-mono font-black uppercase tracking-wider">
-                    SANDBOX ARSENAL
-                  </span>
-                )}
-              </div>
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.9)] animate-pulse shrink-0" />
+            <div className="flex items-center gap-2">
+              <h2 className="not-italic font-mono font-black text-amber-400 uppercase tracking-[0.25em] text-lg">
+                {t('compendium', {}, 'Compendium')}
+              </h2>
+              {isSandbox && (
+                <span className="px-2 py-0.5 text-xs bg-cyan-950/80 text-cyan-300 border border-cyan-400/40 rounded font-mono font-black uppercase tracking-wider">
+                  SANDBOX ARSENAL
+                </span>
+              )}
             </div>
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Header Category Pills */}
             <div className="flex items-center gap-1 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800">
-              <button
-                onClick={() => { gameAudio.playButtonClickSound(); setActiveCategory('ALL'); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold uppercase transition-all cursor-pointer ${
-                  activeCategory === 'ALL' ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.4)]' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                {t('all_systems', {}, 'ALL')}
-              </button>
               <button
                 onClick={() => { gameAudio.playButtonClickSound(); setActiveCategory('LOADOUT'); }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold uppercase transition-all cursor-pointer ${
@@ -660,7 +645,7 @@ export function Compendium({
         {/* ========================================================================= */}
         {/* TOP LOADOUT AREA (Showing current loadout weapons, abilities & attributes) */}
         {/* ========================================================================= */}
-        {(activeCategory === 'ALL' || activeCategory === 'LOADOUT') && (
+        {(activeCategory === 'LOADOUT') && (
         <section 
           className="bg-zinc-950/90 border border-cyan-500/30 rounded-2xl p-4 sm:p-6 shadow-[0_0_25px_rgba(6,182,212,0.15)] relative overflow-visible backdrop-blur-md"
           id="compendium_active_loadout"
@@ -766,7 +751,7 @@ export function Compendium({
                                     chain.currentTier === 2 ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(168,85,247,0.5)]' :
                                     'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                                   }`}>
-                                    {chain.currentTier === 3 ? 'T3 GOD-ENGINE' : chain.currentTier === 2 ? 'T2 MUTATED' : 'T1 BASE'}
+                                    {chain.currentTier === 3 ? 'T3 ULTIMATE' : chain.currentTier === 2 ? 'T2 MUTATED' : 'T1 BASE'}
                                   </span>
                                 </div>
 
@@ -786,7 +771,7 @@ export function Compendium({
                                   )}
                                   {chain.currentTier === 2 && chain.ultimate && (
                                     <span className="text-amber-300 text-[11px] font-semibold hidden sm:inline">
-                                      • God-Engine at Lv.{ultLevel} ({Math.max(0, ultLevel - (wpn.level || 1))} lvls to unlock)
+                                      • Ultimate at Lv.{ultLevel} ({Math.max(0, ultLevel - (wpn.level || 1))} lvls to unlock)
                                     </span>
                                   )}
                                 </div>
@@ -891,7 +876,7 @@ export function Compendium({
                                     </span>
                                   </div>
 
-                                  <p className="text-xs text-zinc-300 font-sans leading-relaxed border-t border-zinc-800/60 pt-2.5">
+                                  <p className="text-xs text-zinc-300 leading-relaxed border-t border-zinc-800/60 pt-2.5">
                                     {t('up_desc_' + chain.base.id, {}, chain.base.description)}
                                   </p>
                                 </div>
@@ -950,7 +935,7 @@ export function Compendium({
                                     </span>
                                   </div>
 
-                                  <p className="text-xs text-zinc-300 font-sans leading-relaxed border-t border-zinc-800/60 pt-2.5">
+                                  <p className="text-xs text-zinc-300 leading-relaxed border-t border-zinc-800/60 pt-2.5">
                                     {t('up_desc_' + chain.evolution.id, {}, chain.evolution.description)}
                                   </p>
                                 </div>
@@ -969,7 +954,7 @@ export function Compendium({
                               </div>
                             )}
 
-                            {/* STAGE 3: GOD-ENGINE */}
+                            {/* STAGE 3: ULTIMATE */}
                             {chain.ultimate ? (
                               <div 
                                 onClick={() => {
@@ -995,7 +980,7 @@ export function Compendium({
                                           {t('up_name_' + chain.ultimate.id, {}, chain.ultimate.name)}
                                         </h5>
                                         <span className="text-[9px] font-mono text-amber-400 block uppercase font-bold">
-                                          Stage 3 • God-Engine
+                                          Stage 3 • Ultimate
                                         </span>
                                       </div>
                                     </div>
@@ -1005,26 +990,26 @@ export function Compendium({
                                         ? 'bg-amber-400 text-black shadow-[0_0_12px_rgba(251,191,36,0.7)] font-bold'
                                         : 'bg-amber-950/80 text-amber-300 border border-amber-500/40'
                                     }`}>
-                                      {chain.currentTier === 3 ? `EQUIPPED (Lv.${wpn.level || 1})` : 'GOD-ENGINE'}
+                                      {chain.currentTier === 3 ? `EQUIPPED (Lv.${wpn.level || 1})` : 'ULTIMATE'}
                                     </span>
                                   </div>
 
-                                  <p className="text-xs text-zinc-300 font-sans leading-relaxed border-t border-zinc-800/60 pt-2.5">
+                                  <p className="text-xs text-zinc-300 leading-relaxed border-t border-zinc-800/60 pt-2.5">
                                     {t('up_desc_' + chain.ultimate.id, {}, chain.ultimate.description)}
                                   </p>
                                 </div>
 
-                                {/* God-Engine requirement footnote */}
+                                {/* Ultimate requirement footnote */}
                                 <div className="mt-2 pt-2.5 border-t border-zinc-800/60 flex items-center justify-between text-[10px] font-mono">
-                                  <span className="text-zinc-500 uppercase font-bold">God-Engine Threshold:</span>
+                                  <span className="text-zinc-500 uppercase font-bold">Ultimate Threshold:</span>
                                   <span className="text-amber-300 bg-amber-950/60 border border-amber-800/50 px-2 py-0.5 rounded font-bold">
-                                    {t('god_engine_at_level_label', {}, 'GOD-ENGINE AT LEVEL')} {ultLevel}
+                                    {t('god_engine_at_level_label', {}, 'ULTIMATE AT LEVEL')} {ultLevel}
                                   </span>
                                 </div>
                               </div>
                             ) : (
                               <div className="p-4 border border-dashed border-zinc-800/40 rounded-xl flex items-center justify-center text-zinc-600 font-mono text-xs uppercase">
-                                No God-Engine Stage
+                                No Ultimate Stage
                               </div>
                             )}
                           </div>
@@ -1153,7 +1138,7 @@ export function Compendium({
                                     </span>
                                   </div>
 
-                                  <p className="text-xs text-zinc-300 font-sans leading-relaxed border-t border-zinc-800/60 pt-2.5">
+                                  <p className="text-xs text-zinc-300 leading-relaxed border-t border-zinc-800/60 pt-2.5">
                                     {t('up_desc_' + chain.base.id, {}, chain.base.description)}
                                   </p>
                                 </div>
@@ -1209,7 +1194,7 @@ export function Compendium({
                                     </span>
                                   </div>
 
-                                  <p className="text-xs text-zinc-300 font-sans leading-relaxed border-t border-zinc-800/60 pt-2.5">
+                                  <p className="text-xs text-zinc-300 leading-relaxed border-t border-zinc-800/60 pt-2.5">
                                     {t('up_desc_' + chain.mutation.id, {}, chain.mutation.description)}
                                   </p>
                                 </div>
@@ -1295,58 +1280,13 @@ export function Compendium({
         )}
 
         {/* ========================================================================= */}
-        {/* GALLERY AREA: Navigation & Evolution Roadmaps */}
+        {/* GALLERY AREA: Evolution Roadmaps */}
         {/* ========================================================================= */}
-        {(activeCategory === 'ALL' || activeCategory !== 'LOADOUT') && (
+        {(activeCategory !== 'LOADOUT') && (
         <div>
-          {/* Gallery Section Header & Filter Tabs */}
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-8 pb-4 border-b border-zinc-800">
-            <div className="flex items-center gap-2.5">
-              <Layers className="text-amber-500" size={26} /> 
-              <h2 className="text-2xl font-black text-white uppercase tracking-wider">
-                {t('gallery', {}, 'GALLERY')}
-              </h2>
-            </div>
-
-            {/* Category Navigation Pills */}
-            <div className="flex items-center gap-1.5 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800">
-              <button
-                onClick={() => { gameAudio.playButtonClickSound(); setActiveCategory('ALL'); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold uppercase transition-all cursor-pointer ${
-                  activeCategory === 'ALL' ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.4)]' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                {t('all_systems', {}, 'ALL')}
-              </button>
-              <button
-                onClick={() => { gameAudio.playButtonClickSound(); setActiveCategory('WEAPONS'); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold uppercase transition-all cursor-pointer ${
-                  activeCategory === 'WEAPONS' ? 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.4)]' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                {t('weapons_roadmap', {}, 'WEAPONS')}
-              </button>
-              <button
-                onClick={() => { gameAudio.playButtonClickSound(); setActiveCategory('ABILITIES'); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold uppercase transition-all cursor-pointer ${
-                  activeCategory === 'ABILITIES' ? 'bg-purple-500 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                {t('tactical_abilities', {}, 'ABILITIES')}
-              </button>
-              <button
-                onClick={() => { gameAudio.playButtonClickSound(); setActiveCategory('STATS'); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold uppercase transition-all cursor-pointer ${
-                  activeCategory === 'STATS' ? 'bg-emerald-500 text-black shadow-[0_0_10px_rgba(16,185,129,0.4)]' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                {t('stat_augmentations', {}, 'STATS')}
-              </button>
-            </div>
-          </div>
 
           {/* 1. WEAPON ROADMAP */}
-          {(activeCategory === 'ALL' || activeCategory === 'WEAPONS') && (
+          {(activeCategory === 'WEAPONS') && (
             <section className="mb-16" id="compendium_weapons_section">
               <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
                 <h3 className="text-xl font-black text-white uppercase tracking-wider flex items-center gap-2">
@@ -1355,7 +1295,7 @@ export function Compendium({
                 <div className="flex gap-4 text-xs font-mono font-bold uppercase tracking-wider">
                   <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-zinc-700"></div> {t('status_base', {}, 'Base')}</div>
                   <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-purple-600"></div> {t('evolve', {}, 'Mutated (T2)')}</div>
-                  <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-amber-400"></div> {t('god_engine', {}, 'God-Engine (T3)')}</div>
+                  <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-amber-400"></div> {t('god_engine', {}, 'Ultimate (T3)')}</div>
                 </div>
               </div>
               
@@ -1413,7 +1353,7 @@ export function Compendium({
           )}
 
           {/* 2. ABILITY EVOLVED SECTION */}
-          {(activeCategory === 'ALL' || activeCategory === 'ABILITIES') && (
+          {(activeCategory === 'ABILITIES') && (
             <section className="mb-16" id="compendium_abilities_section">
               <h3 className="text-xl font-black text-white uppercase tracking-wider mb-6 flex items-center gap-2">
                 <ZapIcon className="text-cyan-400" size={24} /> {t('tactical_abilities_evolution', {}, 'Tactical Abilities Evolution')}
@@ -1453,7 +1393,7 @@ export function Compendium({
           )}
 
           {/* 3. STAT EVOLVED ROADMAPS SECTION */}
-          {(activeCategory === 'ALL' || activeCategory === 'STATS') && (
+          {(activeCategory === 'STATS') && (
             <section className="mb-16" id="compendium_stats_section">
               <h3 className="text-xl font-black text-white uppercase tracking-wider mb-6 flex items-center gap-2">
                 <Target className="text-emerald-400" size={24} /> {t('stat_augmentation_roadmap', {}, 'Stat Augmentation Roadmap')}
@@ -1495,7 +1435,7 @@ export function Compendium({
                         <ChevronRight className="rotate-90 md:rotate-0 text-zinc-700" size={16} />
                       </div>
 
-                      {/* GOD-ENGINE STAT */}
+                      {/* ULTIMATE STAGE */}
                       <div className="flex-1 min-w-0">
                         {chain.ultimate ? (
                           nodeCard(chain.ultimate)
@@ -1513,7 +1453,7 @@ export function Compendium({
           )}
 
           {/* Auxiliary Stats */}
-          {(activeCategory === 'ALL' || activeCategory === 'STATS') && auxiliaryStats.length > 0 && (
+          {(activeCategory === 'STATS') && auxiliaryStats.length > 0 && (
             <section className="mb-16" id="compendium_aux_stats_section">
               <h3 className="text-lg font-black text-zinc-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <Sparkles className="text-yellow-400" size={18} /> {t('auxiliary_augmentations', {}, 'Auxiliary Augmentations')}

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * AI Playtesting & Balance Bot — CLI entry point.
+ * AI Playtesting & Balance Bot: CLI entry point.
  *
  * Usage:
  *   npm run playtest -- --runs=20 --policy=all
@@ -99,7 +99,7 @@ async function main(): Promise<void> {
   const GameEngine: typeof import('../../src/game/engine.ts').GameEngine = engineModule.GameEngine;
 
   if (args.runs > SESSION_RUN_CAP) {
-    console.log(`\n[guard] session cap is ${SESSION_RUN_CAP} runs — refusing ${args.runs}.`);
+    console.log(`\n[guard] session cap is ${SESSION_RUN_CAP} runs: refusing ${args.runs}.`);
     console.log('[guard] MANUAL CONFIRMATION REQUIRED to extend a session beyond the cap.');
     process.exit(1);
   }
@@ -163,7 +163,7 @@ async function main(): Promise<void> {
         if (decision.action !== 'none') {
           tuneLog.push(decision);
           tweakCount++;
-          stamp(`  → tune [${decision.action}] ${decision.knob}=${decision.appliedTo} — ${decision.reason}`);
+          stamp(`  → tune [${decision.action}] ${decision.knob}=${decision.appliedTo}: ${decision.reason}`);
         }
       }
     }
@@ -252,7 +252,7 @@ function renderMarkdown(report: any): string {
   const rows = report.runs
     .map(
       (r: any) =>
-        `| ${r.attempt} | ${r.policy} | ${r.outcome} | ${r.roomsCleared} | ${r.diedAtRoom ?? '-'} | ${r.clearedBoss50 ? '✅' : '—'} | ${r.clearedBoss100 ? '✅' : '—'} | ${r.simMinutes} | ${r.damageTaken} |`,
+        `| ${r.attempt} | ${r.policy} | ${r.outcome} | ${r.roomsCleared} | ${r.diedAtRoom ?? '-'} | ${r.clearedBoss50 ? '✅' : '-'} | ${r.clearedBoss100 ? '✅' : '-'} | ${r.simMinutes} | ${r.damageTaken} |`,
     )
     .join('\n');
   return `# AI Playtest Audit
@@ -288,7 +288,7 @@ function renderCompendiumSync(report: any): string {
 | Session run cap | ${SESSION_RUN_CAP} |
 
 ## Tuning history this session
-${report.tuneLog.length ? report.tuneLog.map((d: any) => `- [${d.action}] ${d.knob} → ${d.appliedTo} — ${d.reason}`).join('\n') : '- none'}
+${report.tuneLog.length ? report.tuneLog.map((d: any) => `- [${d.action}] ${d.knob} → ${d.appliedTo}: ${d.reason}`).join('\n') : '- none'}
 `;
 }
 

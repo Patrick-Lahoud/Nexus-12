@@ -1,24 +1,27 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, PlayCircle, FlaskConical, Trophy, Flame, ChevronLeft, Volume2, VolumeX, Settings, Palette, Globe } from 'lucide-react';
+import { Play, PlayCircle, FlaskConical, Trophy, Flame, ChevronLeft, Settings, Palette, Globe, TriangleAlert } from 'lucide-react';
 import { gameAudio } from '../../game/audio';
 import AchievementsAndStyle from './AchievementsAndStyle';
 import TitleBackgroundBattle from './TitleBackgroundBattle';
+import BadgeStrip from './BadgeStrip';
 import { useLanguage, LANGUAGES } from '../../game/localization';
 
 interface TitleScreenProps {
   onStart: (mode: 'SURVIVAL' | 'HARDCORE' | 'SANDBOX' | 'OVERDRIVE' | 'OVERDRIVE_SANDBOX', startLevel?: number) => void;
   highestRoom: number;
   onShowSettings: () => void;
+  resumeRoom?: number | null;
+  onResume?: () => void;
 }
 
-export default function TitleScreen({ onStart, highestRoom, onShowSettings }: TitleScreenProps) {
+export default function TitleScreen({ onStart, highestRoom, onShowSettings, resumeRoom, onResume }: TitleScreenProps) {
   const { lang, setLang, t } = useLanguage();
   const [showLanguageList, setShowLanguageList] = useState<boolean>(false);
   const [showModes, setShowModes] = useState<boolean>(false);
   const [showAchievementsModal, setShowAchievementsModal] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'SURVIVAL' | 'HARDCORE' | 'SANDBOX'>('SURVIVAL');
-  const [isMuted, setIsMuted] = useState<boolean>(gameAudio.getMuted());
+  const [showDeployConfirm, setShowDeployConfirm] = useState<boolean>(false);
   const [retroTheme, setRetroTheme] = useState(() => localStorage.getItem('game_retro_theme') !== 'false');
 
   useEffect(() => {
@@ -51,11 +54,11 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings }: Ti
             gameAudio.playButtonClickSound();
             setShowLanguageList(!showLanguageList);
           }}
-          className={`flex items-center gap-1.5 px-3 py-1.5 bg-zinc-950/80 border rounded-md hover:border-cyan-500 hover:text-white transition-all text-zinc-400 cursor-pointer ${retroTheme ? 'border-cyan-900/40 text-cyan-400' : 'border-zinc-850'}`}
+          className="flex items-center transition-all hover:opacity-70 cursor-pointer"
           id="lang-selector-toggle"
+          aria-label="Select language"
         >
-          <Globe size={13} className="text-cyan-400 animate-spin-slow" />
-          <span className="text-xs font-bold">{LANGUAGES.find(l => l.code === lang)?.name || 'English'}</span>
+          <Globe size={20} strokeWidth={2.5} className="text-white animate-spin-slow" />
         </button>
         
         <AnimatePresence>
@@ -96,7 +99,7 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings }: Ti
 
       {/* Background Cyber Effect */}
       <div className="absolute inset-0 opacity-25 pointer-events-none">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-cyan-950/20 rounded-full blur-[140px]" />
+
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_20%_30%,rgba(6,182,212,0.1)_0%,transparent_50%)]" />
         <div className="absolute top-0 left-0 w-full h-full bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:32px_32px]" />
       </div>
@@ -119,7 +122,7 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings }: Ti
               transition={{ delay: 0.1, duration: 0.5 }}
               className="mb-8 relative"
             >
-              <div className={`absolute -inset-1 rounded-lg blur-2xl ${retroTheme ? 'bg-cyan-500/10' : 'bg-cyan-500/10'}`} />
+
               <h1 className="text-7xl font-black text-white italic tracking-tighter leading-none mb-3 uppercase">
                 BOUNDLESS <span className={`${retroTheme ? 'text-cyan-400 drop-shadow-[0_0_25px_rgba(34,211,238,0.5)]' : 'text-cyan-400 drop-shadow-[0_0_25px_rgba(34,211,238,0.5)]'} font-black relative`}>{t('logo_sub')}</span>
               </h1>
@@ -175,7 +178,7 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings }: Ti
                   className="px-4 py-2 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-amber-500/60 hover:border-amber-400 text-amber-300 font-black font-mono text-xs sm:text-sm uppercase tracking-widest rounded-md transition-all flex items-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.2)] hover:shadow-[0_0_25px_rgba(245,158,11,0.4)] hover:scale-105 active:scale-95 duration-150"
                   id="style-locker-btn"
                 >
-                  <Palette size={16} className="text-amber-300 animate-pulse stroke-[2.5]" />
+                  <Palette size={16} className="text-amber-300 stroke-[2.5]" />
                   <span>{t('locker')}</span>
                 </button>
               </div>
@@ -253,15 +256,35 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings }: Ti
                           {t('best_room_label', {}, 'Best')}: ROOM {highestRoom}
                         </p>
                       )}
+                      <BadgeStrip mode="SURVIVAL" />
                     </div>
 
-                    <div className="mt-2">
+                    <div className="mt-2 flex flex-col gap-2.5">
+                      {resumeRoom && resumeRoom > 0 && onResume && (
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => {
+                            gameAudio.playButtonClickSound();
+                            onResume();
+                          }}
+                          className="w-full py-3 bg-emerald-600/25 border border-emerald-500/60 text-emerald-300 font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2.5 rounded-lg hover:bg-emerald-600 hover:text-white transition-all cursor-pointer"
+                          id="resume-run-btn"
+                        >
+                          <PlayCircle size={16} />
+                          {t('resume_run', { room: resumeRoom }, 'Resume Run: Room')} {resumeRoom}
+                        </motion.button>
+                      )}
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => {
                           gameAudio.playButtonClickSound();
-                          onStart('OVERDRIVE');
+                          if (resumeRoom && resumeRoom > 0) {
+                            setShowDeployConfirm(true);
+                          } else {
+                            onStart('OVERDRIVE');
+                          }
                         }}
                         className="w-full py-4 bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-black uppercase tracking-widest text-sm flex items-center justify-center gap-3 rounded-lg hover:brightness-110 cursor-pointer shadow-[0_0_25px_rgba(245,158,11,0.3)] transition-all"
                       >
@@ -286,15 +309,15 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings }: Ti
                         {t('hardcore_header', {}, 'Hardcore Mode')}
                       </h3>
                       <p className="text-zinc-300 text-xs sm:text-sm mt-2 leading-relaxed font-medium">
-                        {t('hardcore_desc', {}, 'Endless waves with zero mercy — no checkpoints, no rebuilds, no autosaves.')}
-                      </p>
-
-                      {highestRoom > 0 && (
+                        {t('hardcore_desc', {}, 'Endless waves with zero mercy: no checkpoints, no rebuilds, no autosaves.')}
+                      </p>                      {highestRoom > 0 && (
                         <p className="text-[11px] text-zinc-500 uppercase tracking-widest font-bold mt-4">
                           {t('best_room_label', {}, 'Best')}: ROOM {highestRoom}
                         </p>
                       )}
+                      <BadgeStrip mode="HARDCORE" />
                     </div>
+
 
                     <div className="mt-2">
                       <motion.button
@@ -359,30 +382,60 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings }: Ti
         )}
       </AnimatePresence>
 
-      {/* Audio Setup and Music Source Accreditation */}
-      <div className="w-full max-w-2xl sm:max-w-3xl z-20 flex flex-col sm:flex-row items-center justify-between mt-auto pt-6 gap-3 text-zinc-500 text-xs font-mono border-t border-zinc-950/40 relative">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              const nextMuted = !isMuted;
-              setIsMuted(nextMuted);
-              gameAudio.setMute(nextMuted);
-              gameAudio.playButtonClickSound();
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 bg-zinc-950/60 border rounded hover:border-zinc-800 text-zinc-400 hover:text-white transition-all cursor-pointer ${retroTheme ? 'border-cyan-900/40 text-cyan-400' : 'border-zinc-900'}`}
+      <AnimatePresence>
+        {showDeployConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/85 backdrop-blur-md"
           >
-            {isMuted ? <VolumeX size={14} className="text-red-400 animate-pulse" /> : <Volume2 size={14} className={retroTheme ? "text-cyan-400" : "text-cyan-400"} />}
-            <span>{isMuted ? t('sound_muted') : t('sound_on')}</span>
-          </button>
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              className="relative w-full max-w-sm space-ui-bg border-2 border-amber-500/40 rounded-2xl shadow-[0_0_50px_rgba(245,158,11,0.25)] flex flex-col overflow-hidden pointer-events-auto"
+            >
+              <div className="relative z-10 p-6 flex flex-col gap-4 text-center">
+                <div className="mx-auto p-3 bg-amber-950/60 border border-amber-500/40 rounded-xl text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.3)]">
+                  <TriangleAlert size={24} />
+                </div>
+                <div>
+                  <h3 className="text-white font-black uppercase text-lg tracking-tight">{t('deploy_confirm_title', {}, 'New Run?')}</h3>
+                  <p className="text-zinc-400 text-xs mt-2 leading-relaxed">
+                    {t('deploy_confirm_desc', {}, 'Deploying a new run will delete your saved run. You will not be able to resume it.')}
+                  </p>
+                </div>
+                <div className="flex gap-3 mt-1">
+                  <button
+                    onClick={() => { gameAudio.playButtonClickSound(); setShowDeployConfirm(false); }}
+                    className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-mono font-bold text-xs uppercase tracking-wider rounded-xl transition-all border-2 border-zinc-700 cursor-pointer"
+                  >
+                    {t('cancel')}
+                  </button>
+                  <button
+                    onClick={() => { gameAudio.playButtonClickSound(); setShowDeployConfirm(false); onStart('OVERDRIVE'); }}
+                    className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-mono font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] cursor-pointer"
+                  >
+                    {t('deploy_confirm_btn', {}, 'DEPLOY')}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          <button
-            onClick={onShowSettings}
-            className={`flex items-center gap-1.5 px-3 py-1.5 bg-zinc-950/60 border rounded hover:border-zinc-800 text-zinc-400 hover:text-white transition-all cursor-pointer group ${retroTheme ? 'border-cyan-900/40 text-cyan-400' : 'border-zinc-900'}`}
-          >
-            <Settings size={14} className={`${retroTheme ? 'text-cyan-400' : 'text-cyan-400'} group-hover:rotate-45 transition-transform`} />
-            <span>{t('config_settings')}</span>
-          </button>
-        </div>
+      {/* Top Right: Settings */}
+      <div className="absolute top-4 right-4 z-[1000] flex items-center gap-2 font-mono text-[10px]">
+        <button
+          onClick={onShowSettings}
+          className="flex items-center transition-all hover:opacity-70 cursor-pointer group"
+          aria-label="Settings"
+        >
+          <Settings size={20} strokeWidth={2.5} className="text-white group-hover:rotate-45 transition-transform" />
+        </button>
       </div>
     </div>
   );
