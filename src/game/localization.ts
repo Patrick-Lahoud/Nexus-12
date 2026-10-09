@@ -1916,7 +1916,7 @@ const ADDITIONAL_TRANSLATIONS: Record<string, Record<string, string>> = {
     enemy_bomber_desc: "Kamikaze-Einheit. Stürzt sich auf Ziele, um zu explodieren, und hinterlässt Lava.",
     enemy_gravity_drain: "Gravitationssauger",
     enemy_gravity_drain_desc: "Anziehungswirbel. Erzeugt starke Gravitation, die Spieler anzieht.",
-    boss_phantom_ace: "PHANTOM-ASS",
+    boss_phantom_ace: "PHANTOM-ACE",
     boss_phantom_ace_desc: "Scharfer Jäger. Teleportiert sich, erzeugt Klone und komplexe Nadelgitter.",
     enemy_swarmer: "Schwarm",
     enemy_swarmer_desc: "Winzige Insektenwesen. Extrem schnell, greifen in dichten taktischen Gruppen an.",

@@ -49,53 +49,35 @@ export default function HUD({ engine, room, score, highestRoom = 1, onShowShop, 
   return (
     <div className="flex justify-between items-end mb-4 border-b-2 border-zinc-800 pb-3 pointer-events-auto select-none">
       <div className="flex flex-col gap-2">
-        <div className="flex gap-2.5 items-center flex-wrap">
-          {/* Compendium Button */}
-          <motion.button 
+        <div className="flex items-stretch bg-zinc-900/85 border border-zinc-800 rounded-lg overflow-hidden divide-x divide-zinc-800">
+          {/* Compendium */}
+          <button 
             onClick={() => { gameAudio.playButtonClickSound(); onShowCompendium(); }}
-            animate={{ 
-              boxShadow: [
-                "0 0 4px rgba(34,211,238,0.3)", 
-                "0 0 15px rgba(34,211,238,0.8)", 
-                "0 0 4px rgba(34,211,238,0.3)"
-              ],
-              borderColor: [
-                "rgba(103,232,249,0.4)",
-                "rgba(34,211,238,1)",
-                "rgba(103,232,249,0.4)"
-              ]
-            }}
-            transition={{
-              repeat: Infinity,
-              duration: 2.0,
-              repeatDelay: 3.5,
-              ease: "easeInOut"
-            }}
-            className="flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-cyan-400 text-black font-black border-2 border-cyan-300 px-3.5 py-2 hover:from-cyan-400 hover:to-cyan-300 transition-all rounded-lg shadow-[0_0_12px_rgba(34,211,238,0.35)] cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-zinc-300 hover:text-cyan-300 hover:bg-zinc-800 font-bold transition-all cursor-pointer group"
           >
-            <BookOpen size={16} className="text-black stroke-[2.5]" />
-            <span className="text-xs uppercase tracking-wider">{t('compendium_btn')}</span>
-          </motion.button>
+            <BookOpen size={13} className="text-cyan-400" />
+            <span className="text-[10px] uppercase tracking-wider">{t('compendium_btn')}</span>
+          </button>
 
-          {/* Settings Button */}
+          {/* Settings */}
           <button 
             onClick={() => { gameAudio.playButtonClickSound(); onShowSettings(); }}
-            className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 hover:border-cyan-400 px-3.5 py-2 hover:bg-zinc-800 text-zinc-300 hover:text-cyan-300 font-bold transition-all rounded-lg cursor-pointer group"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-zinc-300 hover:text-cyan-300 hover:bg-zinc-800 font-bold transition-all cursor-pointer group"
           >
-            <Settings size={16} className="text-cyan-400 group-hover:rotate-45 transition-transform" />
-            <span className="text-xs uppercase tracking-wider">{t('settings_btn')}</span>
+            <Settings size={13} className="text-cyan-400 group-hover:rotate-45 transition-transform" />
+            <span className="text-[10px] uppercase tracking-wider">{t('settings_btn')}</span>
           </button>
 
-          {/* Handbook Button */}
+          {/* Handbook */}
           <button 
             onClick={() => { gameAudio.playButtonClickSound(); onShowGuidebook(); }}
-            className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 hover:border-cyan-400 px-3.5 py-2 hover:bg-zinc-800 text-zinc-300 hover:text-cyan-300 font-bold transition-all rounded-lg cursor-pointer group"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-zinc-300 hover:text-cyan-300 hover:bg-zinc-800 font-bold transition-all cursor-pointer group"
           >
-            <HelpCircle size={16} className="text-cyan-400" />
-            <span className="text-xs uppercase tracking-wider">{t('handbook_btn')}</span>
+            <HelpCircle size={13} className="text-cyan-400" />
+            <span className="text-[10px] uppercase tracking-wider">{t('handbook_btn')}</span>
           </button>
 
-          {/* Quit Button */}
+          {/* Quit */}
           <button 
             onClick={() => {
               gameAudio.playButtonClickSound();
@@ -103,10 +85,10 @@ export default function HUD({ engine, room, score, highestRoom = 1, onShowShop, 
               // Pause the simulation while the quit confirmation is open
               window.dispatchEvent(new CustomEvent('game_pause_request', { detail: { paused: true } }));
             }}
-            className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 hover:border-red-500 px-3.5 py-2 hover:bg-red-950/30 text-zinc-300 hover:text-red-400 font-bold transition-all rounded-lg cursor-pointer group"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-zinc-300 hover:text-red-400 hover:bg-red-950/40 font-bold transition-all cursor-pointer group"
           >
-            <LogOut size={16} className="text-red-400" />
-            <span className="text-xs uppercase tracking-wider">{t('quit_btn')}</span>
+            <LogOut size={13} className="text-red-400" />
+            <span className="text-[10px] uppercase tracking-wider">{t('quit_btn')}</span>
           </button>
 
           <AnimatePresence>
@@ -158,38 +140,35 @@ export default function HUD({ engine, room, score, highestRoom = 1, onShowShop, 
           </AnimatePresence>
           
           {isSandbox && (
-            <div className="flex items-center gap-2 bg-zinc-950/80 border border-zinc-800 px-3 py-1 rounded-lg ml-2 group hover:border-cyan-500/50 transition-colors">
-              <span className="text-xs font-black text-zinc-400 uppercase font-mono">{t('input_sector')}</span>
-              <div className="flex items-center gap-1">
-                <button 
-                  onClick={() => { gameAudio.playButtonClickSound(); onRoomChange?.(Math.max(1, room - 1)); }}
-                  className="w-6 h-6 flex items-center justify-center bg-zinc-800 hover:bg-cyan-500 hover:text-black text-xs font-black rounded transition-colors"
-                >
-                  -
-                </button>
-                <input 
-                  type="number"
-                  value={room}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value);
-                    if (!isNaN(val)) onRoomChange?.(Math.max(1, val));
-                  }}
-                  className="bg-transparent text-xs font-mono font-bold text-cyan-400 w-10 text-center border-none outline-none focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-                <button 
-                  onClick={() => { gameAudio.playButtonClickSound(); onRoomChange?.(room + 1); }}
-                  className="w-6 h-6 flex items-center justify-center bg-zinc-800 hover:bg-cyan-500 hover:text-black text-xs font-black rounded transition-colors"
-                >
-                  +
-                </button>
-              </div>
+            <div className="flex items-center gap-1 border-l border-zinc-800 pl-1 font-nexus">
+              <button 
+                onClick={() => { gameAudio.playButtonClickSound(); onRoomChange?.(Math.max(1, room - 1)); }}
+                className="w-7 h-full flex items-center justify-center text-zinc-300 hover:bg-zinc-800 hover:text-cyan-300 text-sm font-bold transition-all cursor-pointer"
+              >
+                -
+              </button>
+              <input 
+                type="number"
+                value={room}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  if (!isNaN(val)) onRoomChange?.(Math.max(1, val));
+                }}
+                className="bg-transparent text-[11px] tracking-[0.15em] font-bold text-cyan-400 w-10 text-center border-none outline-none focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none py-1.5"
+              />
+              <button 
+                onClick={() => { gameAudio.playButtonClickSound(); onRoomChange?.(room + 1); }}
+                className="w-7 h-full flex items-center justify-center text-zinc-300 hover:bg-zinc-800 hover:text-cyan-300 text-sm font-bold transition-all cursor-pointer"
+              >
+                +
+              </button>
             </div>
           )}
         </div>
 
         <h1 className="text-3xl sm:text-4xl font-black italic uppercase leading-none tracking-tight text-white mt-1">
           {isSandbox ? t('sandbox_tab') : `${t('room_label')} ${room}`} 
-          <span className="text-zinc-400 ml-3 text-2xl font-mono not-italic font-bold">
+          <span className="text-zinc-400 ml-6 text-lg not-italic font-bold normal-case">
             {isSandbox ? t('unlimited') : `${t('highest_room_label', {}, 'Highest Room')}: ${Math.max(highestRoom || 1, room)}`}
           </span>
         </h1>
@@ -358,7 +337,7 @@ export function SidebarStats({ engine, room = 1 }: { engine: GameEngine; room?: 
     };
 
     return (
-        <div id="sidebar-stats" className="w-[205px] flex flex-col gap-3.5 h-full select-none">
+        <div id="sidebar-stats" className="hidden lg:flex w-[205px] flex-col gap-3.5 h-full select-none">
             {/* Active Abilities Section */}
             <div className="bg-zinc-950/70 p-4 border border-zinc-800/80 rounded-2xl backdrop-blur-md flex flex-col flex-1 overflow-hidden min-h-[210px] shadow-lg">
                 <div className="flex justify-between items-center mb-3 pb-2 border-b border-zinc-800">

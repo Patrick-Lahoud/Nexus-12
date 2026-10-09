@@ -65,6 +65,9 @@ class CrazyGamesService {
    * Checks whether the current host environment is appropriate to load the external CrazyGames SDK script.
    */
   private isCrazyGamesSupportedHost(): boolean {
+    // CrazyGames submission build: always load the SDK regardless of hostname
+    // (the sandboxed QA iframe may run on a domain our checks don't know).
+    if (typeof __CG_BUILD__ === 'boolean' && __CG_BUILD__) return true;
     if (typeof window === 'undefined') return false;
     if (window.CrazyGames?.SDK) return true;
 
@@ -90,6 +93,13 @@ class CrazyGamesService {
 
       if (window.CrazyGames?.SDK) {
         resolve(true);
+        return;
+      }
+
+      // Coolmath school-safe build: ads/platform SDKs are compiled out entirely.
+      if (typeof __CM_BUILD__ === 'boolean' && __CM_BUILD__) {
+        console.log('[CrazyGames SDK] Coolmath build: SDK disabled by policy.');
+        resolve(false);
         return;
       }
 

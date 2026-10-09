@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Play, PlayCircle, FlaskConical, Trophy, Flame, ChevronLeft, Settings, Palette, Globe, TriangleAlert } from 'lucide-react';
 import { gameAudio } from '../../game/audio';
@@ -22,14 +22,40 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
   const [showAchievementsModal, setShowAchievementsModal] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'SURVIVAL' | 'HARDCORE' | 'SANDBOX'>('SURVIVAL');
   const [showDeployConfirm, setShowDeployConfirm] = useState<boolean>(false);
-  const [retroTheme, setRetroTheme] = useState(() => localStorage.getItem('game_retro_theme') !== 'false');
 
+  // TENTATIVE cursor aura: moves the spotlight gradient on the frame dim
+  // and the colour-reveal mask (both declared below). The CSS vars are set
+  // on the root container so both overlays inherit them; rAF-throttled
+  // writes, no React re-renders.
+  const frameDimRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const handleSettingsUpdate = () => {
-      setRetroTheme(localStorage.getItem('game_retro_theme') !== 'false');
+    let raf = 0;
+    let cx = 0;
+    let cy = 0;
+    let pending = false;
+    const apply = () => {
+      pending = false;
+      const el = frameDimRef.current;
+      if (!el) return;
+      // Convert viewport coords to container-local coords here (once per
+      // frame max) so container scrolling never desyncs the aura.
+      const rect = el.getBoundingClientRect();
+      el.style.setProperty('--cursor-x', `${cx - rect.left}px`);
+      el.style.setProperty('--cursor-y', `${cy - rect.top}px`);
     };
-    window.addEventListener('game_settings_updated', handleSettingsUpdate);
-    return () => window.removeEventListener('game_settings_updated', handleSettingsUpdate);
+    const onMove = (e: MouseEvent) => {
+      cx = e.clientX;
+      cy = e.clientY;
+      if (!pending) {
+        pending = true;
+        raf = requestAnimationFrame(apply);
+      }
+    };
+    window.addEventListener('mousemove', onMove);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      if (pending) cancelAnimationFrame(raf);
+    };
   }, []);
 
   // Loop menu music when title screen is active
@@ -43,9 +69,41 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
   }, []);
 
   return (
-    <div className="absolute inset-0 bg-[#020205] flex flex-col items-center justify-between p-6 sm:p-8 z-[100] overflow-y-auto pointer-events-auto select-none">
+    <div ref={frameDimRef} className="absolute inset-0 bg-[#020205] flex flex-col items-center justify-between p-6 sm:p-8 z-[100] overflow-y-auto pointer-events-auto select-none">
       {/* Dynamic Simulation Background */}
       <TitleBackgroundBattle />
+
+      {/* TENTATIVE uniform frame dim + cursor aura: the whole game frame is
+          evenly darkened (background sim included), except inside a circular
+          radius that follows the cursor — there the dim lifts (undim/unblack)
+          and a soft white glow whitens the background. Revert by restoring
+          the plain `bg-black/45` div (or the old radial halo behind the title). */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-[1]"
+        style={{
+          background:
+            'radial-gradient(circle 210px at var(--cursor-x, 50%) var(--cursor-y, 42%), rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.06) 26%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.45) 78%)',
+        }}
+      />
+
+      {/* TENTATIVE colour-reveal: a zero-saturation layer desaturates the
+          whole frame EXCEPT a circular hole that follows the cursor, so the
+          background sim renders in colour only inside the radius of light.
+          The sim canvas beneath now paints native colours. Revert by deleting
+          this div and restoring grayscale strokes in TitleBackgroundBattle. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-[2]"
+        style={{
+          backgroundColor: 'hsl(0, 0%, 50%)',
+          mixBlendMode: 'saturation',
+          WebkitMaskImage:
+            'radial-gradient(circle 120px at var(--cursor-x, 50%) var(--cursor-y, 42%), transparent 0%, transparent 88%, black 100%)',
+          maskImage:
+            'radial-gradient(circle 120px at var(--cursor-x, 50%) var(--cursor-y, 42%), transparent 0%, transparent 88%, black 100%)',
+        }}
+      />
 
       {/* Floating Language Corner Selector */}
       <div className="absolute top-4 left-4 z-[1000] flex flex-col items-start font-mono text-[10px]">
@@ -113,8 +171,12 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 1.02 }}
             transition={{ duration: 0.25 }}
-            className="flex-1 w-full flex flex-col justify-center items-center text-center max-w-lg z-10"
-          >
+            className="relative flex-1 w-full flex flex-col justify-center items-center text-center max-w-lg z-10"
+          >            {/* TENTATIVE uniform frame dim: the readability halo behind the
+                title was replaced by an even darkening layer across the whole
+                game frame. Revert by restoring the radial-gradient div and
+                removing this one. */}
+
             {/* Logo Unit */}
             <motion.div
               initial={{ y: -20, opacity: 0 }}
@@ -123,29 +185,38 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
               className="mb-8 relative"
             >
 
-              <h1 className="text-7xl font-black text-white italic tracking-tighter leading-none mb-3 uppercase">
-                BOUNDLESS <span className={`${retroTheme ? 'text-cyan-400 drop-shadow-[0_0_25px_rgba(34,211,238,0.5)]' : 'text-cyan-400 drop-shadow-[0_0_25px_rgba(34,211,238,0.5)]'} font-black relative`}>{t('logo_sub')}</span>
+              {/* EXPERIMENT (tentative rename to Nexus 12): demo title text in a
+                  sci-fi display font (Space Mono). Revert by restoring the
+                  "BOUNDLESS + t('logo_sub')" heading and removing the
+                  --font-nexus theme entry in index.css. */}
+              <h1 style={{ textShadow: 'none', transition: 'text-shadow 0.4s' }} onMouseEnter={e => e.currentTarget.style.textShadow = '0 0 10px rgba(251,191,36,0.65), 0 0 22px rgba(245,158,11,0.5), 0 0 42px rgba(245,158,11,0.32)'} onMouseLeave={e => e.currentTarget.style.textShadow = 'none'} className="font-nexus not-italic text-7xl font-bold text-amber-400 tracking-widest leading-none mb-3 uppercase cursor-default">
+                NEXUS-12
               </h1>
             </motion.div>
 
             {/* Simple Central Play Button */}
             <motion.button
-              whileHover={{ scale: 1.05, boxShadow: retroTheme ? "0 0 30px rgba(6,182,212,0.4)" : "0 0 30px rgba(6,182,212,0.4)" }}
+              whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(251,191,36,0.35)" }}
               whileTap={{ scale: 0.96 }}
               onClick={() => {
                 gameAudio.resume();
                 gameAudio.playButtonClickSound();
                 setShowModes(true);
               }}
-              className={`w-full max-w-xs py-4.5 font-black uppercase tracking-widest text-sm rounded flex items-center justify-center gap-3 transition-all cursor-pointer border-t border-white/20 ${
-                retroTheme 
-                  ? 'bg-cyan-50 hover:bg-cyan-400/90 text-black shadow-[0_0_20px_rgba(6,182,212,0.25)]' 
-                  : 'bg-cyan-500 hover:bg-cyan-400 text-black shadow-[0_0_20px_rgba(6,182,212,0.25)]'
-              }`}
+              className="w-full max-w-[13rem] py-3 font-nexus font-bold uppercase tracking-[0.08em] text-xs rounded border border-white/60 bg-white/10 text-white shadow-none hover:bg-white hover:text-black hover:shadow-[0_0_30px_rgba(251,191,36,0.35)] flex items-center justify-center gap-2.5 transition-all cursor-pointer"
             >
               <Play size={18} fill="currentColor" />
               {t('enter_simulation')}
             </motion.button>
+
+            {/* Coolmath school-safe build: plain, NON-CLICKABLE text credit
+                (their editorial guidelines allow text-only credits only).
+                TODO: replace the placeholder studio name before upload. */}
+            {typeof __CM_BUILD__ !== 'undefined' && __CM_BUILD__ && (
+              <p className="mt-6 text-[10px] font-nexus tracking-[0.2em] uppercase text-zinc-500 select-none pointer-events-none">
+                A NEXUS INTERACTIVE STUDIO PRODUCTION
+              </p>
+            )}
           </motion.div>
         ) : (
           <motion.div
@@ -163,7 +234,7 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
                   gameAudio.playButtonClickSound();
                   setShowModes(false);
                 }}
-                className="flex items-center gap-2 text-zinc-400 hover:text-white font-mono text-xs uppercase font-bold tracking-wider transition-colors cursor-pointer"
+                className="flex items-center gap-2 text-zinc-400 hover:text-white font-nexus text-xs font-bold tracking-[0.08em] transition-colors cursor-pointer"
               >
                 <ChevronLeft size={16} />
                 {t('back_to_title')}
@@ -175,7 +246,7 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
                     gameAudio.playButtonClickSound();
                     setShowAchievementsModal(true);
                   }}
-                  className="px-4 py-2 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-amber-500/60 hover:border-amber-400 text-amber-300 font-black font-mono text-xs sm:text-sm uppercase tracking-widest rounded-md transition-all flex items-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.2)] hover:shadow-[0_0_25px_rgba(245,158,11,0.4)] hover:scale-105 active:scale-95 duration-150"
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-amber-500/60 hover:border-amber-400 text-amber-300 font-black font-nexus text-xs sm:text-sm tracking-[0.05em] rounded-md transition-all flex items-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.2)] hover:shadow-[0_0_25px_rgba(245,158,11,0.4)] hover:scale-105 active:scale-95 duration-150"
                   id="style-locker-btn"
                 >
                   <Palette size={16} className="text-amber-300 stroke-[2.5]" />
@@ -191,7 +262,7 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
                   gameAudio.playButtonClickSound();
                   setActiveTab('SURVIVAL');
                 }}
-                className={`flex-1 py-3 text-xs sm:text-sm font-black uppercase tracking-wider transition-all rounded-md flex items-center justify-center gap-2 cursor-pointer ${
+                className={`flex-1 py-3 text-xs sm:text-sm font-black font-nexus tracking-[0.05em] transition-all rounded-md flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'SURVIVAL'
                     ? 'bg-amber-500 text-black shadow-[0_0_18px_rgba(245,158,11,0.4)]'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
@@ -205,7 +276,7 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
                   gameAudio.playButtonClickSound();
                   setActiveTab('HARDCORE');
                 }}
-                className={`flex-1 py-3 text-xs sm:text-sm font-black uppercase tracking-wider transition-all rounded-md flex items-center justify-center gap-2 cursor-pointer ${
+                className={`flex-1 py-3 text-xs sm:text-sm font-black font-nexus tracking-[0.05em] transition-all rounded-md flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'HARDCORE'
                     ? 'bg-red-600 text-white shadow-[0_0_18px_rgba(239,68,68,0.45)]'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
@@ -219,7 +290,7 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
                   gameAudio.playButtonClickSound();
                   setActiveTab('SANDBOX');
                 }}
-                className={`flex-1 py-3 text-xs sm:text-sm font-black uppercase tracking-wider transition-all rounded-md flex items-center justify-center gap-2 cursor-pointer ${
+                className={`flex-1 py-3 text-xs sm:text-sm font-black font-nexus tracking-[0.05em] transition-all rounded-md flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'SANDBOX'
                     ? 'bg-zinc-800 text-purple-300 border border-purple-900/40 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
@@ -244,16 +315,16 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
                     className="flex flex-col h-full justify-between flex-1 gap-5 text-left"
                   >
                     <div>
-                      <h3 className="text-white font-black uppercase tracking-wider text-base sm:text-lg">
+                      <h3 className="text-white font-black font-nexus not-italic normal-case tracking-[0.05em] text-lg sm:text-xl">
                         {t('survival_header')}
                       </h3>
-                      <p className="text-zinc-300 text-xs sm:text-sm mt-2 leading-relaxed font-medium">
+                      <p className="text-zinc-200 text-sm sm:text-base mt-2.5 leading-relaxed font-medium">
                         {t('survival_desc')}
                       </p>
 
                       {highestRoom > 0 && (
-                        <p className="text-[11px] text-zinc-500 uppercase tracking-widest font-bold mt-4">
-                          {t('best_room_label', {}, 'Best')}: ROOM {highestRoom}
+                        <p className="text-xs sm:text-sm text-zinc-400 tracking-[0.1em] font-bold font-nexus mt-4">
+                          {t('highest_room_label', {}, 'Highest Room')}: {highestRoom}
                         </p>
                       )}
                       <BadgeStrip mode="SURVIVAL" />
@@ -268,7 +339,7 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
                             gameAudio.playButtonClickSound();
                             onResume();
                           }}
-                          className="w-full py-3 bg-emerald-600/25 border border-emerald-500/60 text-emerald-300 font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2.5 rounded-lg hover:bg-emerald-600 hover:text-white transition-all cursor-pointer"
+                          className="w-full py-3 bg-emerald-600/25 border border-emerald-500/60 text-emerald-300 font-black font-nexus tracking-[0.05em] text-xs flex items-center justify-center gap-2.5 rounded-lg hover:bg-emerald-600 hover:text-white transition-all cursor-pointer"
                           id="resume-run-btn"
                         >
                           <PlayCircle size={16} />
@@ -286,7 +357,7 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
                             onStart('OVERDRIVE');
                           }
                         }}
-                        className="w-full py-4 bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-black uppercase tracking-widest text-sm flex items-center justify-center gap-3 rounded-lg hover:brightness-110 cursor-pointer shadow-[0_0_25px_rgba(245,158,11,0.3)] transition-all"
+                        className="w-full py-4 bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-black font-nexus tracking-[0.05em] text-sm flex items-center justify-center gap-3 rounded-lg hover:brightness-110 cursor-pointer shadow-[0_0_25px_rgba(245,158,11,0.3)] transition-all"
                       >
                         <PlayCircle size={18} fill="currentColor" className="text-black" />
                         {t('deploy_survival')}
@@ -305,14 +376,14 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
                     className="flex flex-col h-full justify-between flex-1 gap-5 text-left"
                   >
                     <div>
-                      <h3 className="text-white font-black uppercase tracking-wider text-base sm:text-lg">
+                      <h3 className="text-white font-black font-nexus not-italic normal-case tracking-[0.05em] text-lg sm:text-xl">
                         {t('hardcore_header', {}, 'Hardcore Mode')}
                       </h3>
-                      <p className="text-zinc-300 text-xs sm:text-sm mt-2 leading-relaxed font-medium">
+                      <p className="text-zinc-200 text-sm sm:text-base mt-2.5 leading-relaxed font-medium">
                         {t('hardcore_desc', {}, 'Endless waves with zero mercy: no checkpoints, no rebuilds, no autosaves.')}
                       </p>                      {highestRoom > 0 && (
-                        <p className="text-[11px] text-zinc-500 uppercase tracking-widest font-bold mt-4">
-                          {t('best_room_label', {}, 'Best')}: ROOM {highestRoom}
+                        <p className="text-xs sm:text-sm text-zinc-400 tracking-[0.1em] font-bold font-nexus mt-4">
+                          {t('highest_room_label', {}, 'Highest Room')}: {highestRoom}
                         </p>
                       )}
                       <BadgeStrip mode="HARDCORE" />
@@ -327,7 +398,7 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
                           gameAudio.playButtonClickSound();
                           onStart('HARDCORE');
                         }}
-                        className="w-full py-4 bg-gradient-to-r from-red-700 to-red-500 text-white font-black uppercase tracking-widest text-sm flex items-center justify-center gap-3 rounded-lg hover:brightness-110 cursor-pointer shadow-[0_0_25px_rgba(239,68,68,0.35)] border border-red-400/40 transition-all"
+                        className="w-full py-4 bg-gradient-to-r from-red-700 to-red-500 text-white font-black font-nexus tracking-[0.05em] text-sm flex items-center justify-center gap-3 rounded-lg hover:brightness-110 cursor-pointer shadow-[0_0_25px_rgba(239,68,68,0.35)] border border-red-400/40 transition-all"
                       >
                         <Flame size={18} fill="currentColor" className="text-red-200" />
                         {t('deploy_hardcore', {}, 'Deploy Hardcore')}
@@ -346,10 +417,10 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
                     className="flex flex-col h-full justify-between flex-1 gap-6 text-left"
                   >
                     <div>
-                      <h3 className="text-white font-black uppercase tracking-wider text-base sm:text-lg">
+                      <h3 className="text-white font-black font-nexus not-italic normal-case tracking-[0.05em] text-lg sm:text-xl">
                         {t('sandbox_header')}
                       </h3>
-                      <p className="text-zinc-300 text-xs sm:text-sm mt-2 leading-relaxed font-medium">
+                      <p className="text-zinc-200 text-sm sm:text-base mt-2.5 leading-relaxed font-medium">
                         {t('sandbox_desc')}
                       </p>
                     </div>
@@ -362,7 +433,7 @@ export default function TitleScreen({ onStart, highestRoom, onShowSettings, resu
                           gameAudio.playButtonClickSound();
                           onStart('OVERDRIVE_SANDBOX');
                         }}
-                        className="w-full py-4 bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white font-black uppercase tracking-widest text-sm flex items-center justify-center gap-3 rounded-lg hover:brightness-110 cursor-pointer shadow-[0_0_25px_rgba(168,85,247,0.3)] transition-all"
+                        className="w-full py-4 bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white font-black font-nexus tracking-[0.05em] text-sm flex items-center justify-center gap-3 rounded-lg hover:brightness-110 cursor-pointer shadow-[0_0_25px_rgba(168,85,247,0.3)] transition-all"
                       >
                         <FlaskConical size={18} />
                         {t('deploy_sandbox')}

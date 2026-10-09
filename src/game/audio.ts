@@ -32,6 +32,20 @@ class GameAudio {
 
     const savedMuted = localStorage.getItem('audio_muted');
     this.isMuted = savedMuted === 'true';
+
+    // CrazyGames (iOS): the AudioContext enters an "interrupted" state when the
+    // app is backgrounded or interrupted (calls etc.). WebKit only allows
+    // resume() inside a user-initiated gesture, so revive audio on the next
+    // touch. Android keeps the context running, so this is a no-op there.
+    if (typeof document !== 'undefined') {
+      const resumeOnGesture = () => {
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      };
+      document.addEventListener('touchend', resumeOnGesture);
+      document.addEventListener('pointerup', resumeOnGesture);
+    }
   }
 
   // Set up AudioContext and components

@@ -70,6 +70,11 @@ export class GameEngine {
   pointerX: number = 0;
   pointerY: number = 0;
   isTetherActive: boolean = false;
+  // MOBILE: analog joystick steering vector, length 0..1. Applied every tick
+  // as an acceleration toward the stick direction; magnitude scales with deflection.
+  // Zeroed when the stick is released. Desktop input leaves this at 0,0.
+  joystickX: number = 0;
+  joystickY: number = 0;
   deflectPulseCooldownRemaining: number = 0;
   tetherDisableTimer: number = 0;
   deflectLassoTarget: { x: number, y: number } | null = null;
@@ -111,30 +116,36 @@ export class GameEngine {
         return;
       }
 
-      let cost = 24000;
+      let cost = 6000;
       let radius = 13;
       let mineColor = '#10b981';
-      let income = 150;
+      let income = 100;
       let baseHp = 100;
 
       if (mType === 'mine_basic') {
-        cost = 24000;
+        cost = 6000;
         radius = 13;
         mineColor = '#10b981';
-        income = 150;
+        income = 100;
         baseHp = 100;
       } else if (mType === 'mine_heavy') {
-        cost = 48000;
+        cost = 18000;
         radius = 21;
         mineColor = '#f59e0b';
-        income = 350;
+        income = 1000;
         baseHp = 160;
       } else if (mType === 'mine_quantum') {
-        cost = 95000;
+        cost = 55000;
         radius = 28;
         mineColor = '#c084fc';
-        income = 720;
+        income = 10000;
         baseHp = 250;
+      } else if (mType === 'mine_ultra') {
+        cost = 150000;
+        radius = 34;
+        mineColor = '#22d3ee';
+        income = 100000;
+        baseHp = 400;
       }
 
       // Check overlap too close (allowed is 85% of standard radius distance)
@@ -910,12 +921,14 @@ export class GameEngine {
         mineHpLevels: {
           mine_basic: 1,
           mine_heavy: 1,
-          mine_quantum: 1
+          mine_quantum: 1,
+          mine_ultra: 1
         },
         mineProdLevels: {
           mine_basic: 1,
           mine_heavy: 1,
-          mine_quantum: 1
+          mine_quantum: 1,
+          mine_ultra: 1
         },
         turretLevels: {
           turret_tesla: 1,
@@ -1796,6 +1809,17 @@ export class GameEngine {
 
       this.activeControlFields = this.activeControlFields.filter(f => f.life > 0);
     }
+
+        // MOBILE: analog joystick steering (Desktop leaves the vector at 0,0).
+        // Accelerate toward the stick direction; deflection magnitude scales force.
+        if (this.joystickX !== 0 || this.joystickY !== 0) {
+            const mag = Math.hypot(this.joystickX, this.joystickY);
+            const nx = this.joystickX / (mag || 1);
+            const ny = this.joystickY / (mag || 1);
+            const steerForce = 2600 * (this.player.stats.speed || 1.0) * Math.min(1, mag) * dt;
+            this.player.vel.x += nx * steerForce;
+            this.player.vel.y += ny * steerForce;
+        }
 
         if (this.isTetherActive) {
             const dx = this.pointerX - this.player.pos.x;
@@ -5032,6 +5056,7 @@ export class GameEngine {
       let baseExplosionDmg = 1000;
       if (m.type === 'mine_heavy') baseExplosionDmg = 2500;
       else if (m.type === 'mine_quantum') baseExplosionDmg = 5000;
+      else if (m.type === 'mine_ultra') baseExplosionDmg = 10000;
 
       const hpLvl = m.levelHp || 1;
       const prodLvl = m.levelProd || 1;
@@ -7107,6 +7132,11 @@ export class GameEngine {
         });
     }
 
+    // Boss tuning: global melee-vs-ranged damage modifiers against bosses
+    // (0.9 = melee -10% vs bosses, 1.1 = ranged +10% vs bosses)
+    const BOSS_MELEE_DMG_MODIFIER = 0.9;
+    const BOSS_RANGED_DMG_MODIFIER = 1.1;
+
     // Melee weapons deal more damage the faster the player is moving (Momentum Bonus!)
     if (isMelee) {
         const speed = Math.hypot(this.player.vel.x, this.player.vel.y);
@@ -7308,6 +7338,17 @@ export class GameEngine {
         }
         amt = Math.min(amt, windowRemaining);
         anyEnemy.bulwarkWinDmg = (anyEnemy.bulwarkWinDmg || 0) + amt;
+    }
+
+    // Boss tuning: melee strikes hit bosses slightly softer while ranged keeps its
+    // punch — melee can only close in and so must not be free extra damage on a
+    // stationary head-to-head, whereas projectile uptime is a genuine skill cost.
+    if (enemy.isBoss && !isCritOverride) {
+        if (isMelee && amt > 0) {
+            amt *= BOSS_MELEE_DMG_MODIFIER;
+        } else if (!isMelee) {
+            amt *= BOSS_RANGED_DMG_MODIFIER;
+        }
     }
 
     if (enemy.shieldHp && enemy.shieldHp > 0) {

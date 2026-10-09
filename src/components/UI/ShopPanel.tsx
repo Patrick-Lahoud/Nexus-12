@@ -591,9 +591,6 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ engine, isOpen, onClose, i
                     <h2 className="text-lg font-black uppercase tracking-wider text-white font-mono flex items-center gap-2">
                       {t('shop', {}, 'ARMORY & SYSTEMS SHOP')}
                     </h2>
-                    <p className="text-zinc-400 text-xs">
-                      Upgrade core stats, deploy defense turrets, and manage mining drills.
-                    </p>
                   </div>
                 </div>
 

@@ -369,7 +369,15 @@ function shadeColor(hex: string, amount: number): string {
 
 // Cache gradients per color+rounded-radius: the pulse makes visualRadius wobble
 // every frame, and rebuilding a gradient per enemy per frame is pure churn.
+// (Benchmarked against pre-rendered sprite blits: on this stack the cached
+// gradient fill + rim stroke path is measurably faster, so gradients stay.)
 const enemyBodyGradCache = new Map<string, CanvasGradient>();
+// Per-frame gradient allocation caches: creating CanvasGradient objects is one
+// of the hottest canvas costs under heavy projectile/particle load, so these
+// are keyed by the small set of parameters the ramps actually depend on.
+const fireGradCache = new Map<string, CanvasGradient>();
+const bossProjGradCache = new Map<number, CanvasGradient>();
+const bossEyeGradCache = new Map<string, CanvasGradient>();
 
 // Shaded metal block used for boss cannons, plates and turrets: gradient fill with
 // a global top-left key light, beveled highlight edge and dark opposite edge.
@@ -665,21 +673,32 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
             const radius = Math.max(0, (p.isEvolved ? 25 : 15) * (p.life / 2));
             if (radius > 0.5) {
                 const alpha = (p.life / (p.isEvolved ? 4 : 2)) * 0.55;
-                const grad = ctx.createRadialGradient(p.pos.x, p.pos.y, 0, p.pos.x, p.pos.y, radius);
-                if (p.isEvolved) {
-                    grad.addColorStop(0, `rgba(255, 200, 120, ${alpha})`);
-                    grad.addColorStop(0.35, `rgba(239, 68, 68, ${alpha * 0.9})`);
-                    grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
-                } else {
-                    grad.addColorStop(0, `rgba(255, 210, 130, ${alpha})`);
-                    grad.addColorStop(0.35, `rgba(249, 115, 22, ${alpha * 0.9})`);
-                    grad.addColorStop(1, 'rgba(249, 115, 22, 0)');
+                // Cached per (evolved, radius bucket, alpha bucket): the fire trail
+                // spawns dozens of particles per second and allocating a fresh
+                // gradient for every one each frame showed up in profiles.
+                const key = (p.isEvolved ? 'E' : 'N') + Math.round(radius) + '|' + Math.round(alpha * 40);
+                let grad = fireGradCache.get(key);
+                if (!grad) {
+                    grad = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.round(radius));
+                    const a = Math.round(alpha * 40) / 40;
+                    if (p.isEvolved) {
+                        grad.addColorStop(0, `rgba(255, 200, 120, ${a})`);
+                        grad.addColorStop(0.35, `rgba(239, 68, 68, ${a * 0.9})`);
+                        grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+                    } else {
+                        grad.addColorStop(0, `rgba(255, 210, 130, ${a})`);
+                        grad.addColorStop(0.35, `rgba(249, 115, 22, ${a * 0.9})`);
+                        grad.addColorStop(1, 'rgba(249, 115, 22, 0)');
+                    }
+                    if (fireGradCache.size > 256) fireGradCache.clear();
+                    fireGradCache.set(key, grad);
                 }
                 ctx.save();
                 ctx.globalCompositeOperation = 'lighter';
+                ctx.translate(p.pos.x, p.pos.y);
                 ctx.fillStyle = grad;
                 ctx.beginPath();
-                ctx.arc(p.pos.x, p.pos.y, radius, 0, Math.PI * 2);
+                ctx.arc(0, 0, radius, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.restore();
             }
@@ -1779,6 +1798,9 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
         } else if (mType === 'mine_quantum') {
             previewColor = '#c084fc';
             previewRadius = 28;
+        } else if (mType === 'mine_ultra') {
+            previewColor = '#22d3ee';
+            previewRadius = 34;
         }
 
         const checkOverlap = (pos1: any, r1: number, pos2: any, r2: number) => {
@@ -1839,12 +1861,18 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
         ctx.arc(0, 0, rad + 2, 0, Math.PI * 2);
         ctx.stroke();
 
-        // 3. Fiery Menacing Core with gradient
-        const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, rad);
-        grad.addColorStop(0, '#ffffff');
-        grad.addColorStop(0.25, '#fef08a');
-        grad.addColorStop(0.55, '#ea580c');
-        grad.addColorStop(1, '#991b1b');
+        // 3. Fiery Menacing Core with gradient (radius-quantized cache; the
+        // pulse animation quantizes to whole pixels, so the ramp is identical)
+        const gradKey = Math.max(0, Math.round(rad));
+        let grad = bossProjGradCache.get(gradKey);
+        if (!grad) {
+            grad = ctx.createRadialGradient(0, 0, 2, 0, 0, gradKey);
+            grad.addColorStop(0, '#ffffff');
+            grad.addColorStop(0.25, '#fef08a');
+            grad.addColorStop(0.55, '#ea580c');
+            grad.addColorStop(1, '#991b1b');
+            bossProjGradCache.set(gradKey, grad);
+        }
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(0, 0, rad, 0, Math.PI * 2);
@@ -2966,45 +2994,65 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
           const gazeDist = Math.hypot(pPos.x - e.pos.x, pPos.y - e.pos.y);
           const gazeReach = Math.min(1, gazeDist / 500) * 0.65 + 0.35; // farther = looks harder
 
-          // Iris (colored): delayed, softer drift toward the player
+          // Iris (colored): delayed, softer drift toward the player.
+          // Gradient geometry is drawn in a local translate+rotate frame so
+          // the ramps can be cached per (color, radius); this avoids building
+          // two fresh gradients for every boss on every frame.
           const irisR = eyeR * 0.62;
           const irisOff = eyeR * 0.22 * gazeReach;
           const irisX = Math.cos(irisAng) * irisOff;
           const irisY = Math.sin(irisAng) * irisOff;
-          const irisGrad = ctx.createRadialGradient(
-            irisX + Math.cos(irisAng) * irisR * 0.4, irisY + Math.sin(irisAng) * irisR * 0.4, irisR * 0.15,
-            irisX, irisY, irisR
-          );
-          irisGrad.addColorStop(0, shadeColor(e.color, 0.35));
-          irisGrad.addColorStop(0.6, e.color);
-          irisGrad.addColorStop(1, shadeColor(e.color, -0.55));
+          const irisRq = Math.max(1, Math.round(irisR));
+          const irisKey = `I|${e.color}|${irisRq}`;
+          let irisGrad = bossEyeGradCache.get(irisKey);
+          if (!irisGrad) {
+            irisGrad = ctx.createRadialGradient(irisRq * 0.4, 0, irisRq * 0.15, 0, 0, irisRq);
+            irisGrad.addColorStop(0, shadeColor(e.color, 0.35));
+            irisGrad.addColorStop(0.6, e.color);
+            irisGrad.addColorStop(1, shadeColor(e.color, -0.55));
+            if (bossEyeGradCache.size > 256) bossEyeGradCache.clear();
+            bossEyeGradCache.set(irisKey, irisGrad);
+          }
+          ctx.save();
+          ctx.translate(irisX, irisY);
+          ctx.rotate(irisAng);
           ctx.fillStyle = irisGrad;
           ctx.beginPath();
-          ctx.arc(irisX, irisY, irisR, 0, Math.PI * 2);
+          ctx.arc(0, 0, irisR, 0, Math.PI * 2);
           ctx.fill();
           // Iris fibers: thin radial spokes for organic texture
           ctx.strokeStyle = shadeColor(e.color, -0.45);
           ctx.lineWidth = Math.max(1, eyeR * 0.045);
           ctx.beginPath();
           for (let f = 0; f < 10; f++) {
-            const fa = (f / 10) * Math.PI * 2 + irisAng;
-            ctx.moveTo(irisX + Math.cos(fa) * irisR * 0.55, irisY + Math.sin(fa) * irisR * 0.55);
-            ctx.lineTo(irisX + Math.cos(fa) * irisR * 0.92, irisY + Math.sin(fa) * irisR * 0.92);
+            const fa = (f / 10) * Math.PI * 2;
+            ctx.moveTo(Math.cos(fa) * irisR * 0.55, Math.sin(fa) * irisR * 0.55);
+            ctx.lineTo(Math.cos(fa) * irisR * 0.92, Math.sin(fa) * irisR * 0.92);
           }
           ctx.stroke();
+          ctx.restore();
           // Pupil: the free-moving black core, always locked on you and
           // pushing further out the farther away you are
           const pupilR = irisR * 0.52;
           const pupilOff = eyeR * 0.34 * gazeReach;
           const pupilX = Math.cos(trackAng) * pupilOff;
           const pupilY = Math.sin(trackAng) * pupilOff;
-          const pupilGrad = ctx.createRadialGradient(pupilX, pupilY, pupilR * 0.2, pupilX, pupilY, pupilR);
-          pupilGrad.addColorStop(0, '#1a1024');
-          pupilGrad.addColorStop(1, '#000');
+          const pupilRq = Math.max(1, Math.round(pupilR));
+          const pupilKey = `P|${pupilRq}`;
+          let pupilGrad = bossEyeGradCache.get(pupilKey);
+          if (!pupilGrad) {
+            pupilGrad = ctx.createRadialGradient(0, 0, pupilRq * 0.2, 0, 0, pupilRq);
+            pupilGrad.addColorStop(0, '#1a1024');
+            pupilGrad.addColorStop(1, '#000');
+            bossEyeGradCache.set(pupilKey, pupilGrad);
+          }
+          ctx.save();
+          ctx.translate(pupilX, pupilY);
           ctx.fillStyle = pupilGrad;
           ctx.beginPath();
-          ctx.arc(pupilX, pupilY, pupilR, 0, Math.PI * 2);
+          ctx.arc(0, 0, pupilR, 0, Math.PI * 2);
           ctx.fill();
+          ctx.restore();
       }
       ctx.restore();
 
@@ -3238,17 +3286,6 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
         ctx.restore();
       }
 
-      // 2. Draw Rapid Pulsing Deflect Cooldown Ring around player ball
-      ctx.save();
-      const reductionCount = p.stats.deflectCooldownReduction || 0;
-      const maxCooldown = Math.max(0.5, 5.0 - reductionCount * 0.1);
-      const deflectPct = 1.0 - (engine.deflectPulseCooldownRemaining || 0) / maxCooldown;
-      ctx.strokeStyle = deflectPct >= 1.0 ? 'rgba(34, 211, 238, 0.45)' : 'rgba(239, 68, 68, 0.65)';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.arc(p.pos.x, p.pos.y, p.radius + 6, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * Math.min(1.0, deflectPct)));
-      ctx.stroke();
-      ctx.restore();
     }
     
     const bloodLust = p.abilities.find(a => a.type === AbilityType.BLOOD_LUST && a.isActive);
@@ -4657,31 +4694,32 @@ export default React.memo(function GameCanvas({ engine, isPaused, room }: GameCa
       if (w.type === WeaponType.PHOTON_REPEATER || w.type === WeaponType.LANCE_ARRAY || w.type === WeaponType.HYPER_LIGHT_ARRAY) {
           const isUlt = w.type === WeaponType.HYPER_LIGHT_ARRAY;
           const isEvo = w.type === WeaponType.LANCE_ARRAY;
-          const orbitAngle = Date.now() * 0.005; // Fast spin
-          ctx.save();
-          ctx.translate(p.pos.x, p.pos.y);
-          ctx.rotate(orbitAngle);
+          const orbitAngle = Date.now() * 0.004; // Steady spin, same convention as the other orbiting weapons
+          const orbCount = isUlt ? 3 : (isEvo ? 2 : 1);
+          const orbitR = 30;
 
-          // Flamboyant Hyper-Light Prism Star & Radiant Halo
-          const r = 26 + Math.sin(Date.now() * 0.01) * 3;
-          ctx.strokeStyle = isUlt ? '#ffffff' : (isEvo ? '#38bdf8' : '#fef08a');
-          ctx.lineWidth = 1.8;
-          ctx.setLineDash([6, 6]);
-          ctx.beginPath();
-          ctx.arc(0, 0, r, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.setLineDash([]);
+          // Glowing photon orb(s) rotating around the player, with a short motion trail
+          for (let i = 0; i < orbCount; i++) {
+              const a = orbitAngle + (Math.PI * 2 / orbCount) * i;
+              const ox = p.pos.x + Math.cos(a) * orbitR;
+              const oy = p.pos.y + Math.sin(a) * orbitR;
 
-          // Radiant Prism Points
-          const points = isUlt ? 8 : (isEvo ? 6 : 4);
-          ctx.fillStyle = isUlt ? '#38bdf8' : '#fde047';
-          for (let pt = 0; pt < points; pt++) {
-              const pAng = (Math.PI * 2 / points) * pt;
+              ctx.strokeStyle = isUlt ? 'rgba(125, 211, 252, 0.35)' : (isEvo ? 'rgba(56, 189, 248, 0.35)' : 'rgba(253, 224, 71, 0.35)');
+              ctx.lineWidth = 2;
               ctx.beginPath();
-              ctx.arc(Math.cos(pAng) * (r + 4), Math.sin(pAng) * (r + 4), isUlt ? 3 : 2, 0, Math.PI * 2);
+              ctx.arc(p.pos.x, p.pos.y, orbitR, a - 0.9, a);
+              ctx.stroke();
+
+              const orbR = isUlt ? 9 : 7;
+              const grad = ctx.createRadialGradient(ox, oy, 0, ox, oy, orbR);
+              grad.addColorStop(0, isUlt ? '#ffffff' : (isEvo ? '#e0f2fe' : '#fef9c3'));
+              grad.addColorStop(0.55, isUlt ? '#7dd3fc' : (isEvo ? '#38bdf8' : '#fde047'));
+              grad.addColorStop(1, 'rgba(0,0,0,0)');
+              ctx.fillStyle = grad;
+              ctx.beginPath();
+              ctx.arc(ox, oy, orbR, 0, Math.PI * 2);
               ctx.fill();
           }
-          ctx.restore();
       }
 
       if (w.type === WeaponType.RICOCHET_CANNON || w.type === WeaponType.REFRACTION_LANCE || w.type === WeaponType.ECHO_STRIKE) {

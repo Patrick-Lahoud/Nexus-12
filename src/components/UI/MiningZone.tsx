@@ -36,33 +36,47 @@ export const getMineCapUpgradeCost = (currentMax: number) => {
 const MINE_DATA = [
   {
     id: 'mine_basic',
-    name: 'Kinetic Excavator',
+    name: 'Basic Mine',
     description: 'Standard seismic harvester extracting core minerals. Stable and cheap.',
-    cost: 24000,
-    income: 150,
+    cost: 6000,
+    income: 100,
     baseHp: 100,
+    btnColor: 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/25',
     colorClass: 'text-emerald-400 border-emerald-500/30 bg-emerald-950/20 shadow-emerald-500/10 hover:shadow-emerald-500/25',
     colorHex: '#10b981'
   },
   {
     id: 'mine_heavy',
-    name: 'Deep-Core Drill',
+    name: 'Heavy Mine',
     description: 'Heavy thermal drill designed to pierce dense geological mantles. High yield.',
-    cost: 48000,
-    income: 350,
+    cost: 18000,
+    income: 1000,
     baseHp: 160,
+    btnColor: 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/25',
     colorClass: 'text-amber-400 border-amber-500/30 bg-amber-950/20 shadow-amber-500/10 hover:shadow-amber-500/25',
     colorHex: '#f59e0b'
   },
   {
     id: 'mine_quantum',
-    name: 'Quantum Extractor',
+    name: 'Quantum Mine',
     description: 'Siphons rifts for high dense energy particles. Massive late-game profits.',
-    cost: 95000,
-    income: 720,
+    cost: 55000,
+    income: 10000,
     baseHp: 250,
+    btnColor: 'bg-fuchsia-600 hover:bg-fuchsia-500 text-white shadow-fuchsia-500/25',
     colorClass: 'text-fuchsia-400 border-fuchsia-500/30 bg-fuchsia-950/20 shadow-fuchsia-500/10 hover:shadow-fuchsia-500/25',
     colorHex: '#c084fc'
+  },
+  {
+    id: 'mine_ultra',
+    name: 'Ultra Mine',
+    description: 'Taps a micro black hole for near-limitless ore. The pinnacle of extraction.',
+    cost: 150000,
+    income: 100000,
+    baseHp: 400,
+    btnColor: 'bg-cyan-500 hover:bg-cyan-400 text-black shadow-cyan-500/25',
+    colorClass: 'text-cyan-300 border-cyan-400/30 bg-cyan-950/20 shadow-cyan-500/10 hover:shadow-cyan-500/25',
+    colorHex: '#22d3ee'
   }
 ];
 
@@ -76,21 +90,23 @@ export default function MiningZone({ engine, onUpdate, isSandbox }: MiningZonePr
   const activeMinesCount = engine.mines ? engine.mines.filter(m => m.hp > 0).length : 0;
   const capUpgradeCost = getMineCapUpgradeCost(maxCap);
 
-  const [confirmDetonate, setConfirmDetonate] = useState(false);
+
 
   // Initialize properties
   if (!stats.mineHpLevels) {
     stats.mineHpLevels = {
       mine_basic: 1,
       mine_heavy: 1,
-      mine_quantum: 1
+      mine_quantum: 1,
+      mine_ultra: 1
     };
   }
   if (!stats.mineProdLevels) {
     stats.mineProdLevels = {
       mine_basic: 1,
       mine_heavy: 1,
-      mine_quantum: 1
+      mine_quantum: 1,
+      mine_ultra: 1
     };
   }
 
@@ -141,12 +157,12 @@ export default function MiningZone({ engine, onUpdate, isSandbox }: MiningZonePr
 
     // Dynamically update HP level & maxHP on all living mines on field!
     if (engine.mines) {
+      const baseHpOf: Record<string, number> = { mine_basic: 100, mine_heavy: 160, mine_quantum: 250, mine_ultra: 400 };
       engine.mines.forEach(m => {
         if (m.type === id) {
           m.levelHp = hpLvl + 1;
           const oldMax = m.maxHp;
-          const originalBase = id === 'mine_basic' ? 100 : id === 'mine_heavy' ? 160 : 250;
-          const newMax = originalBase + hpLvl * 120;
+          const newMax = baseHpOf[id] + hpLvl * 120;
           m.maxHp = newMax;
           m.hp += (newMax - oldMax); // heal matching amount
         }
@@ -185,10 +201,9 @@ export default function MiningZone({ engine, onUpdate, isSandbox }: MiningZonePr
     onUpdate();
   };
 
-  // Detonation trigger
-  const triggerDetonation = () => {
+  // Recycle all deployed drills, mirroring the turret implode behavior
+  const handleImplodeAll = () => {
     engine.explodeAllMines();
-    setConfirmDetonate(false);
     onUpdate();
   };
 
@@ -283,8 +298,9 @@ export default function MiningZone({ engine, onUpdate, isSandbox }: MiningZonePr
               </button>
             </div>
           </div>
-        ) : (
-          <div className="space-y-4">
+        ) : (          <div className="space-y-4">
+            {/* Top Stats & Capacity bar (same layout as DEFENSE tab) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* DRILL CAPACITY MODULE */}
             <div className="bg-zinc-900/85 border border-zinc-800 p-3 rounded-xl flex flex-col gap-2 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]">
               <div className="flex justify-between items-center text-xs font-mono">
@@ -319,11 +335,31 @@ export default function MiningZone({ engine, onUpdate, isSandbox }: MiningZonePr
               )}
             </div>
 
+            {/* RECYCLE DEPLOYMENTS (implode, mirrors turret behavior) */}
+            {activeMinesCount > 0 ? (
+              <div className="bg-zinc-900/85 border border-zinc-800 p-3 rounded-xl flex flex-col justify-between gap-2">
+                <div className="text-xs text-zinc-400 font-mono font-bold uppercase">RECYCLE DEPLOYMENTS</div>
+                <button
+                  onClick={handleImplodeAll}
+                  className="w-full py-2 border border-red-500/40 bg-red-950/20 hover:bg-red-500 text-red-400 hover:text-black font-mono font-bold text-xs uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+                >
+                  <Flame className="w-4 h-4 text-red-500" />
+                  {t('implode_field_sentry_btn', {}, 'Implode All Field Sentries')}
+                </button>
+              </div>
+            ) : (
+              <div className="bg-zinc-900/40 border border-zinc-800/60 p-3 rounded-xl flex items-center justify-center text-xs text-zinc-500 font-mono">
+                Deploy drills to activate resource extraction
+              </div>
+            )}
+            </div>
+
             <h4 className="text-xs font-black uppercase text-emerald-400 tracking-wider font-mono pt-1">{t('core_units_heading', {}, 'Deploy Mining Drills')}</h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {MINE_DATA.map((mine) => {
                 const activeCount = countActiveMines(mine.id);
+                const isPlacingThis = engine.placingMineType === mine.id;
                 const hpLvl = (stats.mineHpLevels as any)[mine.id] || 1;
                 const prodLvl = (stats.mineProdLevels as any)[mine.id] || 1;
                 const hpUpgradeCost = getMineUpgradeCost(hpLvl);
@@ -333,8 +369,13 @@ export default function MiningZone({ engine, onUpdate, isSandbox }: MiningZonePr
                 const canDeployMore = activeMinesCount < maxCap;
 
                 return (
-                  <div key={mine.id} className="bg-zinc-900/80 p-3.5 border border-zinc-800 hover:border-emerald-500/40 rounded-2xl flex flex-col justify-between gap-2.5 transition-all relative">
-                    {/* Count indicator */}
+                  <div 
+                    key={mine.id} 
+                    className={`border border-zinc-800 bg-zinc-900/80 hover:border-emerald-500/40 rounded-2xl p-3.5 flex flex-col justify-between gap-2.5 transition-all relative ${
+                      isPlacingThis ? 'border-emerald-500/80 shadow-[0_0_20px_rgba(16,185,129,0.25)] bg-emerald-950/10' : ''
+                    }`}
+                  >
+                    {/* Count number in top right */}
                     {activeCount > 0 && (
                       <div className="absolute top-3 right-3 bg-emerald-500 border border-emerald-400 text-black font-black text-xs px-2 py-0.5 rounded-lg shadow-md z-10 font-mono">
                         x{activeCount} DEPLOYED
@@ -342,11 +383,11 @@ export default function MiningZone({ engine, onUpdate, isSandbox }: MiningZonePr
                     )}
 
                     <div className="flex flex-col gap-1 pr-16">
-                      <div className="flex items-center gap-2">
+                      <div className="flex gap-2 items-center">
                         <div className="p-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-emerald-400 shrink-0">
                           <Pickaxe className="w-4 h-4 text-emerald-400" />
                         </div>
-                        <span className="text-xs font-black uppercase text-white font-mono">{t(mine.id + '_name', {}, mine.name)}</span>
+                        <span className="text-xs font-black uppercase text-white font-mono">{t(mine.id + '_title', {}, mine.name)}</span>
                       </div>
                       <p className="text-[11px] text-zinc-400 leading-relaxed mt-1">{t(mine.id + '_description', {}, mine.description)}</p>
                     </div>
@@ -354,7 +395,7 @@ export default function MiningZone({ engine, onUpdate, isSandbox }: MiningZonePr
                     <div className="flex gap-2 font-mono text-xs font-bold justify-between bg-black/60 p-2.5 rounded-xl border border-zinc-800/80 items-center">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] text-zinc-400 uppercase tracking-wider">YIELD:</span>
-                        <span className="text-emerald-400 font-black text-base">+${Math.round(mine.income * (1 + (prodLvl - 1) * 0.25))}/s</span>
+                        <span className="text-emerald-400 font-black text-base">+{Math.round(mine.income * (1 + (prodLvl - 1) * 0.25)).toLocaleString()}/s</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] text-zinc-400 uppercase tracking-wider">HP:</span>
@@ -367,24 +408,20 @@ export default function MiningZone({ engine, onUpdate, isSandbox }: MiningZonePr
                       <button
                         onClick={() => handleEnterPlacement(mine.id, mine.cost)}
                         disabled={!canDeployMore || (!canAffordDeploy && !engine.placingMineType)}
-                        className={`w-full py-2.5 rounded-xl text-xs font-mono font-black uppercase tracking-wider transition-all border cursor-pointer ${
+                        className={`w-full py-2 rounded-xl text-xs font-mono font-black uppercase tracking-wider transition-all border cursor-pointer ${
                           canDeployMore && canAffordDeploy
-                            ? mine.id === 'mine_quantum'
-                              ? 'bg-fuchsia-500 hover:bg-fuchsia-400 text-white border-fuchsia-400 shadow-md shadow-fuchsia-500/30'
-                              : mine.id === 'mine_heavy'
-                              ? 'bg-amber-400 hover:bg-amber-300 text-black border-amber-300 shadow-md shadow-amber-500/30'
-                              : 'bg-emerald-400 hover:bg-emerald-300 text-black border-emerald-300 shadow-md shadow-emerald-500/30'
+                            ? `${mine.btnColor} border-transparent shadow-md font-black`
                             : 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed'
                         }`}
                       >
                         {!canDeployMore 
-                          ? 'MAX DRILLS DEPLOYED' 
-                          : `Deploy (${isSandbox ? 'FREE' : `${mine.cost.toLocaleString()} Cr`})`}
+                          ? t('grid_overloaded_btn', {}, 'GRID OVERLOADED') 
+                          : `${t('deploy_btn_label', {}, 'Deploy ')} (${isSandbox ? t('free_label_val', {}, 'FREE') : `${mine.cost.toLocaleString()} Cr`})`}
                       </button>
 
                       {/* Health & Yield Upgrade Buttons */}
                       {activeCount > 0 && (
-                        <div className="grid grid-cols-2 gap-2 border-t border-zinc-800/80 pt-2.5">
+                        <div className="grid grid-cols-2 gap-2 border-t border-zinc-800/80 pt-2.5 mt-1">
                           <button
                             onClick={() => handleUpgradeHp(mine.id)}
                             disabled={currency < hpUpgradeCost && !isSandbox && !engine.gameMode.includes('SANDBOX')}

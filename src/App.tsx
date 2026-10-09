@@ -12,6 +12,8 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { GameEngine } from './game/engine.ts';
 import GameCanvas from './components/GameCanvas.tsx';
 import HUD, { SidebarStats } from './components/UI/HUD.tsx';
+import TouchControls from './components/UI/TouchControls.tsx';
+import { isTouchDevice } from './game/touch.ts';
 import UpgradeMenu from './components/UI/UpgradeMenu.tsx';
 import TitleScreen from './components/UI/TitleScreen.tsx';
 import { Compendium } from './components/UI/Compendium.tsx';
@@ -54,6 +56,10 @@ interface ResumeSave {
   snapshot: SurvivalSnapshot;
   rebuildsLeft: number;
   savedAt: number;
+  // The upgrade offers waiting on screen when the player quit (level-clear picker
+  // or the run's opening pick). Restored verbatim on resume so quitting can
+  // never swallow the choice.
+  pendingUpgrades?: Upgrade[];
 }
 
 const RESUME_SAVE_KEY = 'survival_resume_save';
@@ -83,6 +89,10 @@ export default function App() {
   const [statPickCounts, setStatPickCounts] = useState<Record<string, number>>({});
   const [sandboxStatCounts, setSandboxStatCounts] = useState<Record<string, number>>({});
   const [tick, setTick] = useState(0);
+
+  // MOBILE: touch device detection (cached). Touch devices get the on-screen
+  // joystick + action buttons instead of keyboard/mouse-only affordances.
+  const isTouch = useMemo(() => isTouchDevice(), []);
   const tickRef = useRef(0);
   const [highestRoom, setHighestRoom] = useState<number>(() => {
     const saved = localStorage.getItem('highest_room');
@@ -128,6 +138,7 @@ export default function App() {
 
   // Engine is stable across renders
   const engine = useMemo(() => new GameEngine(ENGINE_WIDTH, ENGINE_HEIGHT), []);
+  // TEMP-PROBE: expose engine for dev verification (remove before ship)
 
   const score = isSandbox ? 0 : engine.enemiesKilled * 100;
 
@@ -457,6 +468,12 @@ export default function App() {
       survivalCheckpointRef.current = save.snapshot;
       engine.gameMode = 'OVERDRIVE';
       applySurvivalSnapshot(save.snapshot);
+      // The player quit with the upgrade picker open (level-clear pick or the
+      // run's opening pick): restore the exact same offers instead of losing them.
+      if (Array.isArray(save.pendingUpgrades) && save.pendingUpgrades.length > 0) {
+        setAvailableUpgrades(save.pendingUpgrades);
+        setShowUpgrade(true);
+      }
     } catch (e) {
       console.error('Failed to resume run:', e);
       localStorage.removeItem(RESUME_SAVE_KEY);
@@ -699,7 +716,11 @@ export default function App() {
           mode: 'OVERDRIVE',
           snapshot: buildSurvivalSnapshot(room, roomStartHpRef.current),
           rebuildsLeft,
-          savedAt: Date.now()
+          savedAt: Date.now(),
+          // Keep the exact offers that were on screen so resume can re-show them.
+          // Only while the picker is actually open; a stale roll must never leak
+          // into a save made from mid-room.
+          pendingUpgrades: showUpgrade && availableUpgrades.length > 0 ? availableUpgrades : undefined
         };
       } else if (survivalCheckpointRef.current) {
         saved = {
@@ -743,7 +764,7 @@ export default function App() {
     (engine as any).mines = [];
     engine.spawnQueue = [];
     engine.waveQueue = [];
-  }, [engine, gameMode, isGameOver, room, rebuildsLeft, buildSurvivalSnapshot]);
+  }, [engine, gameMode, isGameOver, room, rebuildsLeft, buildSurvivalSnapshot, showUpgrade, availableUpgrades]);
 
   const onGameOver = useCallback(() => {
     gameAudio.stopMusic();
@@ -1383,12 +1404,12 @@ export default function App() {
   };
 
   return (
-    <div className={`w-full h-screen text-white flex items-center justify-center p-4 transition-colors duration-500 relative overflow-hidden bg-black`} >
+    <div className={`w-full h-screen text-white flex items-center justify-center p-2 sm:p-4 transition-colors duration-500 relative overflow-hidden bg-black safe-area-padding`} >
       <SiteBackgroundGrid />
       <div className={`relative z-10 w-full max-w-[1360px] h-full max-h-[820px] flex flex-col overflow-hidden transition-all duration-300 ${
         retroTheme 
-          ? 'retro-theme-active font-retro bg-[#060608]' 
-          : 'font-sans bg-black'
+          ? 'retro-theme-active font-retro bg-[#060608]'
+          : 'game-font-jbmono font-sans bg-black' /* EXPERIMENT: JetBrains Mono across in-game UI (revert = remove game-font-jbmono) */
       }`}>
         
         
@@ -1422,7 +1443,7 @@ export default function App() {
               onQuitToMenu={handleQuitToMenu}
             />
             
-            <div className="flex-1 flex gap-6 min-h-0 overflow-hidden relative">
+            <div className="flex-1 flex gap-2 sm:gap-6 min-h-0 overflow-hidden relative">
               {/* Arena column: boss bar sits above the game frame so it never covers gameplay */}
               <div className="flex-1 flex flex-col min-h-0 relative">
                 {/* Boss Health Bar (above the arena frame) */}
@@ -1472,6 +1493,11 @@ export default function App() {
                 {/* Arena Container */}
                 <div id="arena-container" className={`relative flex-1 overflow-hidden transition-colors duration-1000 ${retroTheme ? 'bg-[#030306]' : 'bg-black'} ${room % 10 === 0 ? 'shadow-[0_0_25px_rgba(220,38,38,0.25)]' : ''}`}>
                   <GameCanvas engine={engine} isPaused={showUpgrade || isGameOver || showShop || showCompendium || showSettings || showGuidebook || Boolean(unlockModalType) || showSandboxModal} room={room} />
+                  
+                  {/* MOBILE: on-screen joystick + action buttons (touch devices only, hidden while paused/menus open) */}
+                  {isTouch && !showUpgrade && !isGameOver && !showShop && !showCompendium && !showSettings && !showGuidebook && !showSandboxModal && (
+                    <TouchControls engine={engine} tick={tick} />
+                  )}
                   
                   {/* Real-time Rate Indicators: DPS & Mining CPS */}
                   <div className="absolute bottom-4 left-4 z-20 flex flex-row gap-2 select-none">

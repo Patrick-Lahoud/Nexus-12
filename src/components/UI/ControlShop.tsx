@@ -301,22 +301,20 @@ export default function ControlShop({ isOpen, onClose, engine, onUpdate, isSandb
                         const id = e.dataTransfer.getData('text/plain') || draggedId;
                         if (id) equipControl(id, 'left');
                       }}
-                      className={`group border rounded-xl p-3 flex flex-col justify-between h-[130px] transition-all relative ${
+                      className={`group border rounded-xl p-3 flex flex-col justify-center h-[92px] transition-all relative ${
                         leftSlot
                           ? 'bg-zinc-900 border-cyan-500/60 shadow-[rgba(6,182,212,0.15)_0_0_25px]'
                           : 'bg-zinc-950/60 border-dashed border-zinc-800'
                       }`}
                     >
-                      <div className="flex justify-end items-start h-4 mb-1">
-                        {leftSlot && (
-                          <button
-                            onClick={() => unequipControl('left')}
-                            className="text-[10px] text-rose-400 transition-colors opacity-0 group-hover:opacity-100 uppercase font-bold cursor-pointer"
-                          >
-                            {t('unequip_label', {}, '[Unequip]')}
-                          </button>
-                        )}
-                      </div>
+                      {leftSlot && (
+                        <button
+                          onClick={() => unequipControl('left')}
+                          className="absolute top-1.5 right-2 z-10 text-[10px] text-rose-400 transition-colors opacity-0 group-hover:opacity-100 uppercase font-bold cursor-pointer"
+                        >
+                          {t('unequip_label', {}, '[Unequip]')}
+                        </button>
+                      )}
 
                       {leftSlot ? (
                         (() => {
@@ -378,22 +376,20 @@ export default function ControlShop({ isOpen, onClose, engine, onUpdate, isSandb
                         const id = e.dataTransfer.getData('text/plain') || draggedId;
                         if (id) equipControl(id, 'right');
                       }}
-                      className={`group border rounded-xl p-3 flex flex-col justify-between h-[130px] transition-all relative ${
+                      className={`group border rounded-xl p-3 flex flex-col justify-center h-[92px] transition-all relative ${
                         rightSlot
                           ? 'bg-zinc-900 border-cyan-500/60 shadow-[rgba(6,182,212,0.15)_0_0_25px]'
                           : 'bg-zinc-950/60 border-dashed border-zinc-800'
                       }`}
                     >
-                      <div className="flex justify-end items-start h-4 mb-1">
-                        {rightSlot && (
-                          <button
-                            onClick={() => unequipControl('right')}
-                            className="text-[10px] text-rose-400 transition-colors opacity-0 group-hover:opacity-100 uppercase font-bold cursor-pointer"
-                          >
-                            {t('unequip_label', {}, '[Unequip]')}
-                          </button>
-                        )}
-                      </div>
+                      {rightSlot && (
+                        <button
+                          onClick={() => unequipControl('right')}
+                          className="absolute top-1.5 right-2 z-10 text-[10px] text-rose-400 transition-colors opacity-0 group-hover:opacity-100 uppercase font-bold cursor-pointer"
+                        >
+                          {t('unequip_label', {}, '[Unequip]')}
+                        </button>
+                      )}
 
                       {rightSlot ? (
                         (() => {

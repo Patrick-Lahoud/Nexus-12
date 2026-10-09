@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
+    "build:crazygames": "vite build --mode crazygames",
+    "build:coolmath": "vite build --mode coolmath",
+    "deploy:surge": "vite build && surge dist/ --domain nexus12.surge.sh",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",

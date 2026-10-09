@@ -2,8 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Boundless Blade</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#020205" />
+    <!-- EXPERIMENT (tentative rename): demo tab title. Revert to "Boundless Blade". -->
+    <title>Nexus 12</title>
+    <!-- EXPERIMENT: sci-fi code font (JetBrains Mono). Load here instead of an
+         @import in index.css, which Tailwind silently drops (imports must
+         precede all rules, and @import "tailwindcss" expands first). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400;1,500;1,700;1,800&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="root"></div>
